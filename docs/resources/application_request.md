@@ -1,28 +1,27 @@
 ---
-page_title: "azexecute_application Resource"
+page_title: "azexecute_application_request Resource"
 description: |-
-  Creates a governed application and waits for automatic provisioning.
+  Submits and tracks a governed application request without waiting for approval.
 ---
 
-# azexecute_application
+# azexecute_application_request
 
-Creates an AZExecute-governed Microsoft Entra application and waits until
-automatic provisioning reaches `Ready`. This synchronous resource is intended
-for tenants where **Use App Request Approval Flow** is disabled.
+Submits a governed AZExecute application request and records its current status.
+This is the recommended application resource because it supports both tenant
+modes:
 
-When application approval is enabled, planning fails before create and directs
-the caller to
-[`azexecute_application_request`](application_request.md). The provider does
-not ask the caller to weaken tenant governance and does not hold a Terraform
-state lock while waiting for a person.
+- an approval tenant normally returns `PendingApproval`;
+- an automatic tenant returns `Provisioning` or `Ready`.
 
-For new configurations, prefer `azexecute_application_request`. It supports
-both approval and automatic tenants without polling.
+Create and read perform one API operation and do not poll while holding the
+Terraform state lock. Run Terraform again after approval or background
+provisioning. When status becomes `Ready`, a later apply records the Entra
+identifiers and applies configured registration settings.
 
 ## Example Usage
 
 ```terraform
-resource "azexecute_application" "automatic" {
+resource "azexecute_application_request" "deployment" {
   display_name           = "platform-deployment-production"
   description            = "Deployment identity managed through Terraform"
   business_justification = "Deploys the approved production platform."
@@ -52,13 +51,14 @@ resource "azexecute_application" "automatic" {
       requires_admin_consent = true
     }
   }
+}
 
-  poll_interval_seconds  = 5
-  create_timeout_minutes = 60
+output "request_status" {
+  value = azexecute_application_request.deployment.status
 }
 
 output "application_client_id" {
-  value = azexecute_application.automatic.application_id
+  value = azexecute_application_request.deployment.application_id
 }
 ```
 
@@ -68,25 +68,22 @@ metadata before apply.
 
 ## Lifecycle
 
-Create submits an idempotent application request, then polls until AZExecute
-reports `Ready`. On success, the Entra application identifiers are stored in
-Terraform state and supported registration settings are applied.
+- `PendingApproval` is a successful apply. An administrator must review the
+  request in AZExecute.
+- `Provisioning` is a successful apply. AZExecute background work is still
+  running.
+- `Ready` means the application identifiers are available.
+- `Rejected` is retained in state, including `status_reason` when available.
 
-- If the tenant requires application approval, planning fails and recommends
-  `azexecute_application_request`.
-- If automatic provisioning exceeds `create_timeout_minutes`, apply returns an
-  error. The stable provider-generated UUID lets the next apply resume the same
-  request without creating a duplicate.
-- `description` and `api_permission_request` changes replace the resource.
-- Metadata and supported registration fields update in place after the
-  application is ready.
+Terraform never approves a request. See the
+[approval workflow guide](../guides/approval-workflows.md).
 
 ## Schema
 
 ### Required
 
 - `display_name` (String) — Microsoft Entra application display name. Must
-  contain `1`–`200` characters. Changing it replaces the resource.
+  contain `1`–`200` characters. Changing it replaces the request/resource.
 
 ### Optional Metadata
 
@@ -94,7 +91,7 @@ All metadata fields are optional in Terraform. The tenant's live metadata
 policy can require an enabled field during plan and apply.
 
 - `description` (String) — application description, up to `500` characters.
-  Changing it replaces the resource.
+  Changing it replaces the request/resource.
 - `business_justification` (String) — business reason, `5`–`1000` characters
   when supplied. Optional and computed because AZExecute can normalize an
   omitted value.
@@ -157,7 +154,7 @@ identifier URIs, and registration concurrency before writing to Entra.
 
 - `api_permission_request` (Set of Block) — API permissions requested during
   application creation. The tenant must enable Terraform API-permission
-  requests. Changing this set replaces the resource.
+  requests. Changing this set replaces the application request/resource.
 
 Each `api_permission_request` supports:
 
@@ -185,45 +182,26 @@ Each `permission` supports:
 The same target and grant type cannot occur twice. Permission approval follows
 the tenant's separate Terraform permission-flow setting.
 
-### Optional Wait Controls
-
-- `poll_interval_seconds` (Number) — delay between automatic-provisioning
-  status checks, from `1` through `300`. Defaults to `5`.
-- `create_timeout_minutes` (Number) — maximum automatic-provisioning wait, from
-  `1` through `1440`. Defaults to `60`.
-
 ### Read-Only
 
 - `id` (String) — stable provider-generated resource UUID used for idempotency
   and import.
-- `status` (String) — current AZExecute status, normally `Provisioning` or
-  `Ready` during a successful automatic flow.
-- `status_reason` (String) — status explanation when supplied.
+- `status` (String) — `PendingApproval`, `Provisioning`, `Ready`, or `Rejected`.
+- `status_reason` (String) — status or rejection explanation when supplied.
 - `request_id` (Number) — numeric AZExecute application request ID.
-- `application_entity_id` (Number) — numeric AZExecute application entity ID.
-- `application_id` (String) — Microsoft Entra application/client ID.
-- `application_object_id` (String) — Microsoft Entra application object ID.
-
-## Approval Restriction
-
-The resource performs a live capability check during plan and create. If the
-tenant uses application approval, the error explains that
-`azexecute_application_request` is required. The tenant setting is never
-changed by Terraform.
-
-## Timeout and Retry
-
-If automatic provisioning exceeds `create_timeout_minutes`, apply returns an
-error but the AZExecute request retains its stable provider-generated UUID.
-Running apply again is idempotent: the API returns or resumes the existing
-request instead of creating a duplicate.
+- `application_entity_id` (Number) — numeric AZExecute application entity ID;
+  null until provisioning completes.
+- `application_id` (String) — Microsoft Entra application/client ID; null until
+  provisioning completes.
+- `application_object_id` (String) — Microsoft Entra application object ID;
+  null until provisioning completes.
 
 ## Import
 
 Import using the stable AZExecute Terraform resource UUID:
 
 ```shell
-terraform import azexecute_application.automatic 11111111-2222-4333-8444-555555555555
+terraform import azexecute_application_request.example 11111111-2222-4333-8444-555555555555
 ```
 
 Do not use an Entra client ID, Entra object ID, numeric request ID, or numeric
@@ -232,21 +210,20 @@ configuration with the imported state.
 
 ## Destroy
 
-Destroying a provisioned or automatically provisioning application requires
-**Allow Application Deletion** in the tenant Terraform settings. The API
-enforces this policy on every request.
+Destroy cancels a pending or rejected request without requiring application
+deletion. Destroying a provisioned or automatically provisioning application
+requires **Allow Application Deletion** in the tenant Terraform settings.
 
-## Move to the Recommended Resource
+## Move from azexecute_application
 
 Provider `0.5` supports a state-preserving cross-resource move:
 
 ```terraform
 moved {
-  from = azexecute_application.automatic
-  to   = azexecute_application_request.automatic
+  from = azexecute_application.example
+  to   = azexecute_application_request.example
 }
 ```
 
-Change the resource type and remove `poll_interval_seconds` and
-`create_timeout_minutes`. See
+Remove the synchronous resource's wait arguments. See
 [Upgrade to 0.5](../guides/migration-v0.5.md).

@@ -21,6 +21,7 @@ import (
 var _ resource.Resource = &applicationResource{}
 var _ resource.ResourceWithConfigure = &applicationResource{}
 var _ resource.ResourceWithImportState = &applicationResource{}
+var _ resource.ResourceWithModifyPlan = &applicationResource{}
 
 type applicationResource struct{ client *azclient.Client }
 
@@ -89,14 +90,18 @@ func (r *applicationResource) Metadata(_ context.Context, request resource.Metad
 }
 
 func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest, response *resource.SchemaResponse) {
+	response.Schema = managedApplicationSchema(true)
+}
+
+func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	replaceString := []planmodifier.String{stringplanmodifier.RequiresReplace()}
-	response.Schema = schema.Schema{
-		Description: "Creates an AZExecute-governed Microsoft Entra application registration, its metadata, and optional API permission requests.",
+	result := schema.Schema{
+		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
 			"id":                                 schema.StringAttribute{Computed: true, Description: "Stable Terraform resource UUID used for API idempotency."},
 			"display_name":                       schema.StringAttribute{Required: true, PlanModifiers: replaceString},
 			"description":                        schema.StringAttribute{Optional: true, PlanModifiers: replaceString},
-			"business_justification":             schema.StringAttribute{Required: true},
+			"business_justification":             schema.StringAttribute{Optional: true, Computed: true, Description: "Business reason for the application. Required only when the tenant metadata policy requires it."},
 			"technical_requirements":             schema.StringAttribute{Optional: true},
 			"intended_audience":                  schema.StringAttribute{Optional: true},
 			"data_access_requirements":           schema.StringAttribute{Optional: true},
@@ -122,8 +127,8 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
 			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
 			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true},
-			"poll_interval_seconds":              schema.Int64Attribute{Optional: true, Description: "Approval/provisioning poll interval; defaults to 5."},
-			"create_timeout_minutes":             schema.Int64Attribute{Optional: true, Description: "Maximum wait for approval and provisioning; defaults to 60."},
+			"poll_interval_seconds":              schema.Int64Attribute{Optional: true, Description: "Automatic-provisioning poll interval; defaults to 5."},
+			"create_timeout_minutes":             schema.Int64Attribute{Optional: true, Description: "Maximum wait for automatic provisioning; defaults to 60."},
 			"status":                             schema.StringAttribute{Computed: true},
 			"status_reason":                      schema.StringAttribute{Computed: true},
 			"request_id":                         schema.Int64Attribute{Computed: true},
@@ -133,7 +138,7 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 		},
 		Blocks: map[string]schema.Block{
 			"api_permission_request": schema.SetNestedBlock{
-				Description:   "API permissions requested as part of application provisioning. Changes replace the application in v0.1.",
+				Description:   "API permissions requested as part of application provisioning. Changes replace the resource.",
 				PlanModifiers: []planmodifier.Set{setplanmodifier.RequiresReplace()},
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
@@ -156,6 +161,11 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 		},
 	}
+	if !includeWaitSettings {
+		delete(result.Attributes, "poll_interval_seconds")
+		delete(result.Attributes, "create_timeout_minutes")
+	}
+	return result
 }
 
 func (r *applicationResource) Configure(_ context.Context, request resource.ConfigureRequest, response *resource.ConfigureResponse) {
@@ -166,6 +176,17 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 	var plan applicationResourceModel
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
 	if response.Diagnostics.HasError() || r.client == nil {
+		return
+	}
+	capabilities, err := r.client.Capabilities(ctx)
+	if err != nil {
+		response.Diagnostics.AddError("Unable to validate AZExecute tenant policy", err.Error())
+		return
+	}
+	if capabilities.UseApplicationRequestFlow {
+		response.Diagnostics.AddError(
+			"Application approval requires the asynchronous resource",
+			"This tenant requires application approval. Use azexecute_application_request; azexecute_application only supports automatic provisioning.")
 		return
 	}
 
@@ -185,6 +206,10 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 		response.Diagnostics.AddError("Unable to create AZExecute application", err.Error())
 		return
 	}
+	// The API can return an equivalent existing resource for an idempotent retry by
+	// display name. Poll the stable ID returned by AZExecute, not the provisional ID
+	// generated for this provider invocation.
+	resourceID = result.ResourceID
 	desired := plan
 	// Persist the server's stable identity before waiting. Terraform can then resume the
 	// same request after cancellation, timeout, or a provider crash instead of creating
@@ -211,7 +236,7 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 			return
 		}
 		if time.Now().After(deadline) {
-			response.Diagnostics.AddError("Application creation timed out", "AZExecute is still awaiting approval or provisioning. Increase create_timeout_minutes and apply again; the API resource ID makes the retry idempotent.")
+			response.Diagnostics.AddError("Application creation timed out", "AZExecute is still provisioning the application. Increase create_timeout_minutes and apply again; the API resource ID makes the retry idempotent.")
 			return
 		}
 		tflog.Info(ctx, "Waiting for AZExecute application", map[string]any{"resource_id": resourceID, "status": result.Status})
@@ -254,7 +279,6 @@ func (r *applicationResource) Read(ctx context.Context, request resource.ReadReq
 	if response.Diagnostics.HasError() || r.client == nil {
 		return
 	}
-	wasIncomplete := state.Status.IsNull() || state.Status.IsUnknown() || state.Status.ValueString() != "Ready"
 	result, err := r.client.GetApplication(ctx, state.ID.ValueString())
 	if azclient.IsNotFound(err) {
 		response.State.RemoveResource(ctx)
@@ -264,55 +288,10 @@ func (r *applicationResource) Read(ctx context.Context, request resource.ReadReq
 		response.Diagnostics.AddError("Unable to read AZExecute application", err.Error())
 		return
 	}
-	if result.Status != "Ready" {
-		result, err = r.waitForApplication(ctx, result, modelIntOr(state.PollIntervalSeconds, 5), modelIntOr(state.CreateTimeoutMinutes, 60))
-		if err != nil {
-			response.Diagnostics.AddError("AZExecute application is not ready", err.Error())
-			return
-		}
-	}
-	if wasIncomplete && boolValue(state.ConfigureRegistration, false) {
-		update, updateErr := updateRequestFromModel(state, result)
-		if updateErr != nil {
-			response.Diagnostics.AddError("Unable to resume registration configuration", updateErr.Error())
-			return
-		}
-		result, err = r.client.UpdateApplication(ctx, state.ID.ValueString(), update)
-		if err != nil {
-			response.Diagnostics.AddError("Unable to resume registration configuration", err.Error())
-			return
-		}
-	}
 	mapApplicationToModel(ctx, result, &state, &response.Diagnostics)
 	if !response.Diagnostics.HasError() {
 		response.Diagnostics.Append(response.State.Set(ctx, &state)...)
 	}
-}
-
-func (r *applicationResource) waitForApplication(ctx context.Context, result *azclient.Application, pollSeconds, timeoutMinutes int64) (*azclient.Application, error) {
-	if pollSeconds < 1 || pollSeconds > 300 || timeoutMinutes < 1 || timeoutMinutes > 1440 {
-		return nil, fmt.Errorf("poll_interval_seconds must be 1-300 and create_timeout_minutes must be 1-1440")
-	}
-	deadline := time.Now().Add(time.Duration(timeoutMinutes) * time.Minute)
-	for result.Status != "Ready" {
-		if result.Status == "Rejected" {
-			return nil, fmt.Errorf("application request rejected: %s", stringPointerValue(result.StatusReason, "no reason was supplied"))
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("timed out while status was %s", result.Status)
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Duration(pollSeconds) * time.Second):
-		}
-		var err error
-		result, err = r.client.GetApplication(ctx, result.ResourceID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return result, nil
 }
 
 func (r *applicationResource) Update(ctx context.Context, request resource.UpdateRequest, response *resource.UpdateResponse) {
@@ -324,6 +303,12 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 	current, err := r.client.GetApplication(ctx, plan.ID.ValueString())
 	if err != nil {
 		response.Diagnostics.AddError("Unable to read AZExecute application before update", err.Error())
+		return
+	}
+	if current.Status != "Ready" {
+		response.Diagnostics.AddError(
+			"Application is not ready for updates",
+			fmt.Sprintf("AZExecute reports status %q. Wait for automatic provisioning to finish and run Terraform again.", current.Status))
 		return
 	}
 	update, err := updateRequestFromModel(plan, current)

@@ -1,87 +1,117 @@
 # AZExecute Terraform Provider
 
-The AZExecute provider manages the deliberately limited application-registration surface exposed by the dedicated AZExecute Terraform API. Version `0.1` supports:
+The public `dyntora/azexecute` provider creates and manages governed Microsoft
+Entra application registrations through the dedicated AZExecute Terraform API.
+It respects the caller's AZExecute role and the tenant's live application,
+metadata, permission, registration, approval, and deletion settings on every
+operation.
 
-- idempotent application creation and import;
-- tenant-governed application and API-permission approval flows;
-- AZExecute application metadata;
-- external and internal API permission requests;
-- common Entra registration settings (account type, identifier and redirect URIs, token issuance, and public-client settings);
-- drift reads and optional deletion.
+Provider `0.5` supports:
 
-The provider does not turn AZExecute's general API into a Terraform-shaped API. Every operation is checked against the current tenant application settings. Callers use the same `User`, `Operator`, or `TenantAdmin` role assigned on the AZExecute enterprise application; Terraform grants no additional privilege.
+- approval-aware asynchronous application requests;
+- synchronous application creation for automatic tenants;
+- tenant-driven application metadata;
+- external and internal API-permission requests;
+- account audience, identifier URIs, redirect URIs, token issuance, fallback
+  public-client behavior, and requested access-token version;
+- import, drift reads, state-preserving migration, and controlled deletion;
+- tenant-capability and application data sources;
+- OIDC, certificate, secret, managed-identity, developer, and static-token
+  authentication.
 
-## Requirements
+Terraform does not elevate the caller or bypass approval. `User` identities can
+manage only the Terraform resources they created. `Operator` and `TenantAdmin`
+identities can manage Terraform resources throughout their AZExecute tenant.
 
-- Terraform 1.0 or later
-- a user or service principal assigned an AZExecute enterprise-application role in the customer tenant
-- the Terraform API and the desired operations enabled under **Tenant administration → Application Configuration → Terraform**
+## Documentation
 
-For automation, use a service principal assigned the minimum required role. `User` identities can manage only the Terraform applications they create. `Operator` and `TenantAdmin` identities can manage Terraform applications across their AZExecute tenant.
+The complete Registry-facing documentation is maintained with the provider:
 
-## Authentication
+- [Provider configuration](docs/index.md)
+- [Getting started](docs/guides/getting-started.md)
+- [Authentication](docs/guides/authentication.md)
+- [Azure DevOps](docs/guides/azure-devops.md)
+- [Approval and provisioning workflows](docs/guides/approval-workflows.md)
+- [`azexecute_application_request`](docs/resources/application_request.md)
+- [`azexecute_application`](docs/resources/application.md)
+- [`azexecute_capabilities`](docs/data-sources/capabilities.md)
+- [`azexecute_application` data source](docs/data-sources/application.md)
+- [Upgrade and state migration](docs/guides/migration-v0.5.md)
+- [Troubleshooting](docs/guides/troubleshooting.md)
 
-The provider accepts credentials in this order:
+After publication, the same reference is available at the
+[Terraform Registry](https://registry.terraform.io/providers/dyntora/azexecute/latest/docs).
 
-1. `access_token` / `AZEXECUTE_ACCESS_TOKEN`;
-2. workload identity federation using an OIDC assertion, rotating assertion file, or the native GitHub Actions OIDC environment;
-3. a client certificate;
-4. a client secret;
-5. an explicitly selected managed identity, or Azure's default credential chain for workload identity, managed identity, Azure CLI, Azure Developer CLI, Azure PowerShell, and supported developer credentials.
-
-The automation application registration belongs to the customer tenant. Configure a federated credential, certificate, or secret on it, then assign its service principal the minimum AZExecute enterprise-application role. All methods exchange that customer credential for an AZExecute API token scoped to `https://api.azexecute.com/.default`. Secrets and tokens should be supplied through environment variables or a secret manager, not checked into Terraform files.
+## Quick Start
 
 ```hcl
 terraform {
+  required_version = ">= 1.8"
+
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.1"
+      version = "~> 0.5"
     }
   }
 }
 
-provider "azexecute" {
-  tenant_id = var.tenant_id
-  client_id = var.client_id
-  # client_secret is normally supplied as AZEXECUTE_CLIENT_SECRET
-  scope = "https://api.azexecute.com/.default"
+provider "azexecute" {}
+
+resource "azexecute_application_request" "example" {
+  display_name = "platform-deployment-production"
+  description  = "Deployment identity managed through Terraform"
+}
+
+output "status" {
+  value = azexecute_application_request.example.status
 }
 ```
 
-### GitHub Actions without a stored secret
+The recommended `azexecute_application_request` resource works with approval
+and automatic tenants. `PendingApproval` and `Provisioning` are successful
+results: approve or wait for provisioning, then run Terraform again to refresh
+the resource and apply registration settings after it reaches `Ready`.
 
-Add a federated identity credential to the customer's automation app registration for the repository, branch, or GitHub environment. Assign its service principal an AZExecute role. The provider detects GitHub's `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN` variables and performs the Azure client-assertion exchange itself; `azure/login` and an Azure subscription are not required.
+Use `azexecute_application` only when the tenant guarantees automatic
+provisioning and Terraform should wait for completion in one apply.
 
-```yaml
-permissions:
-  contents: read
-  id-token: write
+## Tenant Prerequisites
 
-env:
-  AZEXECUTE_TENANT_ID: ${{ vars.AZEXECUTE_TENANT_ID }}
-  AZEXECUTE_CLIENT_ID: ${{ vars.AZEXECUTE_CLIENT_ID }}
+Under **Tenant administration → Application Configuration → Terraform**:
 
-steps:
-  - uses: actions/checkout@v4
-  - uses: hashicorp/setup-terraform@v3
-  - run: terraform init
-  - run: terraform apply -auto-approve
-```
+1. enable the Terraform API and application creation;
+2. decide whether application and permission requests require approval;
+3. configure included and required metadata;
+4. enable registration configuration and permission requests only when needed;
+5. enable application deletion only for workflows allowed to destroy
+   provisioned applications.
 
-The default GitHub assertion audience is `api://AzureADTokenExchange`. Override it only when the customer's Entra federated credential uses a different audience. See [`examples/authentication/github-actions.yml`](examples/authentication/github-actions.yml).
+Assign the automation identity the minimum required AZExecute enterprise
+application role.
 
-### Certificate authentication
+## Authentication
 
-Set `AZEXECUTE_TENANT_ID`, `AZEXECUTE_CLIENT_ID`, and `AZEXECUTE_CLIENT_CERTIFICATE_PATH`. PEM and PKCS#12/PFX certificates containing the private key are supported. Set `AZEXECUTE_CLIENT_CERTIFICATE_PASSWORD` for an encrypted PKCS#12 file. Certificates are preferred over secrets when federation is unavailable.
+Workload identity federation is recommended for CI/CD. The provider accepts a
+short-lived OIDC assertion and exchanges it for a token scoped to
+`https://api.azexecute.com/.default`. It also supports certificates, client
+secrets, managed identity, Azure's default credential chain, and a pre-acquired
+access token.
 
-See [`examples/resources/azexecute_application/resource.tf`](examples/resources/azexecute_application/resource.tf) for a complete application with metadata, registration configuration, and Microsoft Graph permissions.
+Credentials should be supplied through environment variables or a secret
+manager, never committed to Terraform files. See the
+[authentication guide](docs/guides/authentication.md) and the complete
+[Azure DevOps](examples/authentication/azure-devops.yml) and
+[GitHub Actions](examples/authentication/github-actions.yml) examples.
 
-## Approval behavior
+## Tenant-Driven Metadata
 
-Create waits until AZExecute reports `Ready`. When application approval is enabled it remains in `PendingApproval`; after approval, normal AZExecute background provisioning creates and reconciles the Entra registration. Permission requests are either left in the normal permission request queue or applied automatically according to the tenant's Terraform permission-flow setting.
-
-The create request uses a provider-generated UUID and the API enforces a tenant-scoped unique index, so a retry after a timeout or lost response cannot create a duplicate application.
+Only `display_name` is statically required. All tenant-controlled metadata
+arguments are optional in the provider schema. During planning, the provider
+reads `required_metadata_fields` from the live capabilities endpoint and
+reports missing values. The API validates the same current policy before it
+creates or changes anything, so an invalid request does not leave an orphaned
+approval item.
 
 ## Development
 
@@ -90,14 +120,16 @@ go test ./...
 go build ./...
 ```
 
-For local Terraform testing, build the provider and configure a Terraform CLI `dev_overrides` entry as shown in [`.terraformrc.example`](.terraformrc.example).
+For local Terraform testing, build the provider and configure a Terraform CLI
+`dev_overrides` entry as shown in [`.terraformrc.example`](.terraformrc.example).
 
-## Releasing 0.1
+## Releasing
 
-1. Create the public GitHub repository `dyntora/terraform-provider-azexecute`.
-2. Add a GPG signing key to the Terraform Registry and configure the GitHub secrets `GPG_PRIVATE_KEY` and `PASSPHRASE`.
-3. Push an annotated semantic-version tag such as `v0.1.0`.
-4. The release workflow tests all packages and GoReleaser publishes signed Windows, Linux, and macOS archives plus checksums.
-5. Sign in to the Terraform Registry, choose **Publish provider**, and select the GitHub repository. Later tags are discovered automatically.
+1. Configure the Terraform Registry signing key and GitHub release secrets.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.5.0`.
+3. The release workflow tests the provider and publishes signed Windows, Linux,
+   and macOS archives plus checksums.
+4. The Terraform Registry discovers the tagged release from the public GitHub
+   repository.
 
 The provider is licensed under the Mozilla Public License 2.0.

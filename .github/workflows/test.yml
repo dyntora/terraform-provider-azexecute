@@ -17,6 +17,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Validate Registry documentation and release version
+        run: bash scripts/check-release-docs.sh
       - run: go test -race ./...
       - run: go vet ./...
       - run: test -z "$(gofmt -l .)"

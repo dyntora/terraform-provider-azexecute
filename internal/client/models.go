@@ -3,14 +3,16 @@ package client
 import "time"
 
 type Capabilities struct {
-	APIVersion                     string `json:"apiVersion"`
-	Enabled                        bool   `json:"enabled"`
-	AllowApplicationCreation       bool   `json:"allowApplicationCreation"`
-	AllowApplicationDeletion       bool   `json:"allowApplicationDeletion"`
-	AllowAPIPermissionRequests     bool   `json:"allowApiPermissionRequests"`
-	AllowRegistrationConfiguration bool   `json:"allowRegistrationConfiguration"`
-	UseApplicationRequestFlow      bool   `json:"useApplicationRequestFlow"`
-	UseAPIPermissionRequestFlow    bool   `json:"useApiPermissionRequestFlow"`
+	APIVersion                     string   `json:"apiVersion"`
+	Enabled                        bool     `json:"enabled"`
+	AllowApplicationCreation       bool     `json:"allowApplicationCreation"`
+	AllowApplicationDeletion       bool     `json:"allowApplicationDeletion"`
+	AllowAPIPermissionRequests     bool     `json:"allowApiPermissionRequests"`
+	AllowRegistrationConfiguration bool     `json:"allowRegistrationConfiguration"`
+	UseApplicationRequestFlow      bool     `json:"useApplicationRequestFlow"`
+	UseAPIPermissionRequestFlow    bool     `json:"useApiPermissionRequestFlow"`
+	IncludedMetadataFields         []string `json:"includedMetadataFields"`
+	RequiredMetadataFields         []string `json:"requiredMetadataFields"`
 }
 
 type ApplicationCreate struct {

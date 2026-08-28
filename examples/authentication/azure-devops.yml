@@ -1,0 +1,111 @@
+trigger: none
+pr: none
+
+# Complete secretless example for a Microsoft-hosted Azure DevOps agent.
+# Replace the service connection and state coordinates with customer values.
+variables:
+  azureServiceConnection: AZExecute-Terraform
+  terraformVersion: 1.16.0
+  terraformWorkingDirectory: terraform
+  stateStorageAccount: yourtfstateaccount
+  stateContainer: state
+  stateKey: azexecute-application.tfstate
+
+pool:
+  vmImage: ubuntu-24.04
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: AzureCLI@2
+    displayName: Terraform plan and apply
+    inputs:
+      azureSubscription: $(azureServiceConnection)
+      scriptType: pscore
+      scriptLocation: inlineScript
+      addSpnToEnvironment: true
+      visibleAzLogin: false
+      failOnStandardError: false
+      inlineScript: |
+        $ErrorActionPreference = 'Stop'
+        Set-StrictMode -Version Latest
+
+        if ([string]::IsNullOrWhiteSpace($env:idToken)) {
+          throw 'The Azure service connection must use workload identity federation.'
+        }
+
+        Write-Host "##vso[task.setsecret]$($env:idToken)"
+
+        $subscriptionId = (& az account show --query id --output tsv).Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($subscriptionId)) {
+          throw 'Unable to resolve the service connection subscription.'
+        }
+
+        # Azure Blob backend authentication.
+        $env:ARM_CLIENT_ID = $env:servicePrincipalId
+        $env:ARM_TENANT_ID = $env:tenantId
+        $env:ARM_SUBSCRIPTION_ID = $subscriptionId
+        $env:ARM_USE_OIDC = 'true'
+        $env:ARM_OIDC_TOKEN = $env:idToken
+        $env:ARM_USE_AZUREAD = 'true'
+
+        # AZExecute provider authentication. The provider exchanges the same
+        # short-lived assertion for an AZExecute API token.
+        $env:AZEXECUTE_CLIENT_ID = $env:servicePrincipalId
+        $env:AZEXECUTE_TENANT_ID = $env:tenantId
+        $env:AZEXECUTE_USE_OIDC = 'true'
+        $env:AZEXECUTE_OIDC_TOKEN = $env:idToken
+        $env:TF_IN_AUTOMATION = 'true'
+        $env:TF_INPUT = 'false'
+
+        # Install and verify the pinned Terraform release without requiring a
+        # marketplace extension.
+        $version = '$(terraformVersion)'
+        $installDirectory = Join-Path $env:AGENT_TEMPDIRECTORY "terraform-$version"
+        New-Item -ItemType Directory -Path $installDirectory -Force | Out-Null
+        $archiveName = "terraform_${version}_linux_amd64.zip"
+        $archivePath = Join-Path $installDirectory $archiveName
+        $checksumsPath = Join-Path $installDirectory "terraform_${version}_SHA256SUMS"
+        $releaseBase = "https://releases.hashicorp.com/terraform/$version"
+        Invoke-WebRequest -Uri "$releaseBase/$archiveName" -OutFile $archivePath
+        Invoke-WebRequest -Uri "$releaseBase/terraform_${version}_SHA256SUMS" -OutFile $checksumsPath
+
+        $checksumLine = Get-Content -LiteralPath $checksumsPath |
+          Where-Object { $_ -match "^[a-fA-F0-9]{64}\s+\*?$([Regex]::Escape($archiveName))$" } |
+          Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($checksumLine)) {
+          throw "HashiCorp checksum list did not contain $archiveName."
+        }
+        $expectedHash = ($checksumLine -split '\s+')[0].ToUpperInvariant()
+        $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToUpperInvariant()
+        if ($expectedHash -ne $actualHash) {
+          throw 'Terraform archive checksum verification failed.'
+        }
+
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $installDirectory -Force
+        $terraform = Join-Path $installDirectory 'terraform'
+        & chmod '+x' $terraform
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to make Terraform executable.' }
+
+        Set-Location (Join-Path $env:BUILD_SOURCESDIRECTORY '$(terraformWorkingDirectory)')
+        & $terraform fmt -check -diff -recursive -no-color
+        if ($LASTEXITCODE -ne 0) { throw 'terraform fmt failed.' }
+
+        & $terraform init -input=false -no-color -upgrade `
+          "-backend-config=storage_account_name=$(stateStorageAccount)" `
+          "-backend-config=container_name=$(stateContainer)" `
+          "-backend-config=key=$(stateKey)" `
+          '-backend-config=use_azuread_auth=true' `
+          '-backend-config=use_oidc=true'
+        if ($LASTEXITCODE -ne 0) { throw 'terraform init failed.' }
+
+        & $terraform validate -no-color
+        if ($LASTEXITCODE -ne 0) { throw 'terraform validate failed.' }
+
+        $planPath = Join-Path $env:AGENT_TEMPDIRECTORY 'azexecute.tfplan'
+        & $terraform plan -input=false -no-color -lock-timeout=5m -out=$planPath
+        if ($LASTEXITCODE -ne 0) { throw 'terraform plan failed.' }
+
+        & $terraform apply -input=false -no-color -lock-timeout=5m $planPath
+        if ($LASTEXITCODE -ne 0) { throw 'terraform apply failed.' }
