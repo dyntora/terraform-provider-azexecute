@@ -1,0 +1,27 @@
+name: Terraform AZExecute
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      # Store these non-secret identifiers as GitHub repository/environment variables.
+      AZEXECUTE_TENANT_ID: ${{ vars.AZEXECUTE_TENANT_ID }}
+      AZEXECUTE_CLIENT_ID: ${{ vars.AZEXECUTE_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -input=false
+      - run: terraform plan -input=false -out=tfplan
+      - run: terraform apply -input=false -auto-approve tfplan
+
+      # The provider uses GitHub's short-lived OIDC assertion automatically.
+      # Configure the matching federated identity credential in the customer
+      # tenant and assign that service principal an AZExecute application role.

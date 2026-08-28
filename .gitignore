@@ -1,0 +1,7 @@
+**/.terraform/
+**/.terraform.lock.hcl
+/bin/
+/dist/
+*.tfstate
+*.tfstate.*
+crash.log

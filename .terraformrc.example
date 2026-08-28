@@ -1,0 +1,6 @@
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/dyntora/azexecute" = "C:/path/to/terraform-provider-azexecute/bin"
+  }
+  direct {}
+}
