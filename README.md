@@ -6,7 +6,7 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.5` supports:
+Provider `0.6` supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
@@ -51,7 +51,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.5"
+      version = "~> 0.6"
     }
   }
 }
@@ -126,7 +126,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.5.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.6.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

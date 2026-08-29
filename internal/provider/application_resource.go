@@ -22,6 +22,7 @@ var _ resource.Resource = &applicationResource{}
 var _ resource.ResourceWithConfigure = &applicationResource{}
 var _ resource.ResourceWithImportState = &applicationResource{}
 var _ resource.ResourceWithModifyPlan = &applicationResource{}
+var _ resource.ResourceWithUpgradeState = &applicationResource{}
 
 type applicationResource struct{ client *azclient.Client }
 
@@ -61,14 +62,14 @@ type applicationResourceModel struct {
 	Status                           types.String `tfsdk:"status"`
 	StatusReason                     types.String `tfsdk:"status_reason"`
 	RequestID                        types.Int64  `tfsdk:"request_id"`
-	ApplicationEntityID              types.Int64  `tfsdk:"application_entity_id"`
+	ApplicationEntityID              types.String `tfsdk:"application_entity_id"`
 	ApplicationID                    types.String `tfsdk:"application_id"`
 	ApplicationObjectID              types.String `tfsdk:"application_object_id"`
 }
 
 type permissionRequestModel struct {
 	TargetType                   types.String `tfsdk:"target_type"`
-	TargetApplicationEntityID    types.Int64  `tfsdk:"target_application_entity_id"`
+	TargetApplicationEntityID    types.String `tfsdk:"target_application_entity_id"`
 	TargetExternalAPIAppID       types.String `tfsdk:"target_external_api_app_id"`
 	TargetExternalAPIDisplayName types.String `tfsdk:"target_external_api_display_name"`
 	GrantType                    types.String `tfsdk:"grant_type"`
@@ -96,6 +97,7 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	replaceString := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 	result := schema.Schema{
+		Version:     1,
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
 			"id":                                 schema.StringAttribute{Computed: true, Description: "Stable Terraform resource UUID used for API idempotency."},
@@ -132,7 +134,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"status":                             schema.StringAttribute{Computed: true},
 			"status_reason":                      schema.StringAttribute{Computed: true},
 			"request_id":                         schema.Int64Attribute{Computed: true},
-			"application_entity_id":              schema.Int64Attribute{Computed: true},
+			"application_entity_id":              schema.StringAttribute{Computed: true, Description: "AZExecute application entity UUID."},
 			"application_id":                     schema.StringAttribute{Computed: true, Description: "Microsoft Entra application (client) ID."},
 			"application_object_id":              schema.StringAttribute{Computed: true, Description: "Microsoft Entra application object ID."},
 		},
@@ -143,7 +145,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"target_type":                      schema.StringAttribute{Required: true, Description: "ExternalApi or InternalApplication."},
-						"target_application_entity_id":     schema.Int64Attribute{Optional: true},
+						"target_application_entity_id":     schema.StringAttribute{Optional: true, Description: "AZExecute application entity UUID for an internal application."},
 						"target_external_api_app_id":       schema.StringAttribute{Optional: true},
 						"target_external_api_display_name": schema.StringAttribute{Optional: true},
 						"grant_type":                       schema.StringAttribute{Required: true, Description: "AppRole, DelegatedScope, or AuthorizedClient."},
@@ -165,6 +167,16 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 		delete(result.Attributes, "poll_interval_seconds")
 		delete(result.Attributes, "create_timeout_minutes")
 	}
+	return result
+}
+
+func managedApplicationSchemaV0(includeWaitSettings bool) schema.Schema {
+	result := managedApplicationSchema(includeWaitSettings)
+	result.Version = 0
+	result.Attributes["application_entity_id"] = schema.Int64Attribute{Computed: true, Description: "AZExecute application entity identifier."}
+	permissionBlock := result.Blocks["api_permission_request"].(schema.SetNestedBlock)
+	permissionBlock.NestedObject.Attributes["target_application_entity_id"] = schema.Int64Attribute{Optional: true, Description: "AZExecute application entity identifier for an internal application."}
+	result.Blocks["api_permission_request"] = permissionBlock
 	return result
 }
 
@@ -356,7 +368,7 @@ func createRequestFromModel(ctx context.Context, model applicationResourceModel,
 			return azclient.ApplicationCreate{}, fmt.Errorf("api_permission_request blocks could not be read: %s", diagnostics.Errors()[0].Summary())
 		}
 		for _, block := range blocks {
-			item := azclient.APIPermissionRequest{TargetType: block.TargetType.ValueString(), GrantType: block.GrantType.ValueString(), TargetApplicationEntityID: intPointer(block.TargetApplicationEntityID), TargetExternalAPIAppID: stringPointer(block.TargetExternalAPIAppID), TargetExternalAPIDisplayName: stringPointer(block.TargetExternalAPIDisplayName), Justification: stringPointer(block.Justification)}
+			item := azclient.APIPermissionRequest{TargetType: block.TargetType.ValueString(), GrantType: block.GrantType.ValueString(), TargetApplicationEntityID: stringPointer(block.TargetApplicationEntityID), TargetExternalAPIAppID: stringPointer(block.TargetExternalAPIAppID), TargetExternalAPIDisplayName: stringPointer(block.TargetExternalAPIDisplayName), Justification: stringPointer(block.Justification)}
 			var permissionBlocks []permissionModel
 			permissionDiagnostics := block.Permissions.ElementsAs(ctx, &permissionBlocks, false)
 			if permissionDiagnostics.HasError() || len(permissionBlocks) == 0 {
@@ -448,7 +460,7 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	target.Status = types.StringValue(source.Status)
 	target.StatusReason = stringTypeFromPointer(source.StatusReason)
 	target.RequestID = types.Int64Value(source.RequestID)
-	target.ApplicationEntityID = int64TypeFromPointer(source.ApplicationEntityID)
+	target.ApplicationEntityID = stringTypeFromPointer(source.ApplicationEntityID)
 	target.ApplicationID = stringTypeFromPointer(source.ApplicationID)
 	target.ApplicationObjectID = stringTypeFromPointer(source.ApplicationObjectID)
 
@@ -566,13 +578,6 @@ func stringPointer(value types.String) *string {
 		return nil
 	}
 	result := value.ValueString()
-	return &result
-}
-func intPointer(value types.Int64) *int64 {
-	if value.IsNull() || value.IsUnknown() {
-		return nil
-	}
-	result := value.ValueInt64()
 	return &result
 }
 func modelStringOr(value types.String, current, fallback string) string {

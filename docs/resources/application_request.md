@@ -159,8 +159,8 @@ identifier URIs, and registration concurrency before writing to Entra.
 Each `api_permission_request` supports:
 
 - `target_type` (String, Required) — `ExternalApi` or `InternalApplication`.
-- `target_application_entity_id` (Number) — required for
-  `InternalApplication`; this is the numeric AZExecute application entity ID.
+- `target_application_entity_id` (String) — AZExecute application entity UUID required for
+  `InternalApplication`.
 - `target_external_api_app_id` (String) — required for `ExternalApi`; this is
   the target API's Microsoft Entra application/client UUID.
 - `target_external_api_display_name` (String) — optional display name for an
@@ -189,7 +189,7 @@ the tenant's separate Terraform permission-flow setting.
 - `status` (String) — `PendingApproval`, `Provisioning`, `Ready`, or `Rejected`.
 - `status_reason` (String) — status or rejection explanation when supplied.
 - `request_id` (Number) — numeric AZExecute application request ID.
-- `application_entity_id` (Number) — numeric AZExecute application entity ID;
+- `application_entity_id` (String) — AZExecute application entity UUID;
   null until provisioning completes.
 - `application_id` (String) — Microsoft Entra application/client ID; null until
   provisioning completes.

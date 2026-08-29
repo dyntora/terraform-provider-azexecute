@@ -47,7 +47,7 @@ type ApplicationMetadata struct {
 
 type APIPermissionRequest struct {
 	TargetType                   string          `json:"targetType"`
-	TargetApplicationEntityID    *int64          `json:"targetApplicationEntityId,omitempty"`
+	TargetApplicationEntityID    *string         `json:"targetApplicationEntityId,omitempty"`
 	TargetExternalAPIAppID       *string         `json:"targetExternalApiAppId,omitempty"`
 	TargetExternalAPIDisplayName *string         `json:"targetExternalApiDisplayName,omitempty"`
 	GrantType                    string          `json:"grantType"`
@@ -75,7 +75,7 @@ type Application struct {
 	RequestID             int64                      `json:"requestId"`
 	Status                string                     `json:"status"`
 	StatusReason          *string                    `json:"statusReason,omitempty"`
-	ApplicationEntityID   *int64                     `json:"applicationEntityId,omitempty"`
+	ApplicationEntityID   *string                    `json:"applicationEntityId,omitempty"`
 	ApplicationID         *string                    `json:"applicationId,omitempty"`
 	ApplicationObjectID   *string                    `json:"applicationObjectId,omitempty"`
 	DisplayName           string                     `json:"displayName"`

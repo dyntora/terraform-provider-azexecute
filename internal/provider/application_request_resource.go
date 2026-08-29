@@ -17,6 +17,7 @@ var _ resource.ResourceWithConfigure = &applicationRequestResource{}
 var _ resource.ResourceWithImportState = &applicationRequestResource{}
 var _ resource.ResourceWithModifyPlan = &applicationRequestResource{}
 var _ resource.ResourceWithMoveState = &applicationRequestResource{}
+var _ resource.ResourceWithUpgradeState = &applicationRequestResource{}
 
 type applicationRequestResource struct{ client *azclient.Client }
 
@@ -54,7 +55,7 @@ type applicationRequestResourceModel struct {
 	Status                           types.String `tfsdk:"status"`
 	StatusReason                     types.String `tfsdk:"status_reason"`
 	RequestID                        types.Int64  `tfsdk:"request_id"`
-	ApplicationEntityID              types.Int64  `tfsdk:"application_entity_id"`
+	ApplicationEntityID              types.String `tfsdk:"application_entity_id"`
 	ApplicationID                    types.String `tfsdk:"application_id"`
 	ApplicationObjectID              types.String `tfsdk:"application_object_id"`
 }
@@ -220,13 +221,37 @@ func (r *applicationRequestResource) ImportState(ctx context.Context, request re
 // MoveState provides a lossless upgrade path for configurations that used the
 // original synchronous resource before approval-aware requests were available.
 func (r *applicationRequestResource) MoveState(_ context.Context) []resource.StateMover {
-	sourceSchema := managedApplicationSchema(true)
+	legacySourceSchema := managedApplicationSchemaV0(true)
+	currentSourceSchema := managedApplicationSchema(true)
 	return []resource.StateMover{{
-		SourceSchema: &sourceSchema,
+		SourceSchema: &legacySourceSchema,
 		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
 			if request.SourceTypeName != "azexecute_application" ||
 				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
 				request.SourceSchemaVersion != 0 || request.SourceState == nil {
+				return
+			}
+
+			var source applicationResourceModelV0
+			response.Diagnostics.Append(request.SourceState.Get(ctx, &source)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+
+			upgraded := upgradeApplicationState(ctx, source, &response.Diagnostics)
+			if response.Diagnostics.HasError() {
+				return
+			}
+			var target applicationRequestResourceModel
+			target.setFromApplicationModel(upgraded)
+			response.Diagnostics.Append(response.TargetState.Set(ctx, &target)...)
+		},
+	}, {
+		SourceSchema: &currentSourceSchema,
+		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
+			if request.SourceTypeName != "azexecute_application" ||
+				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
+				request.SourceSchemaVersion != 1 || request.SourceState == nil {
 				return
 			}
 

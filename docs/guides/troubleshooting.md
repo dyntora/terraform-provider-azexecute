@@ -33,7 +33,7 @@ terraform providers
 terraform init -upgrade
 ```
 
-Verify the configuration requires `dyntora/azexecute` `~> 0.5` and inspect
+Verify the configuration requires `dyntora/azexecute` `~> 0.6` and inspect
 `.terraform.lock.hcl`. CI/CD caches and mirrors must also contain the selected
 release. Provider `0.5.0` is the first release containing the complete Registry
 reference and the approval-aware resource documentation in the same tag.

@@ -42,7 +42,7 @@ output "client_id" {
   `Provisioning`, `Ready`, or `Rejected`.
 - `status_reason` (String) — status or rejection explanation when present.
 - `request_id` (Number) — numeric AZExecute application request ID.
-- `application_entity_id` (Number) — numeric AZExecute application entity ID;
+- `application_entity_id` (String) — AZExecute application entity UUID;
   null until provisioning completes.
 - `application_id` (String) — Microsoft Entra application/client ID; null until
   provisioning completes.

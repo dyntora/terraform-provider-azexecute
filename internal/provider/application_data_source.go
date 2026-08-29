@@ -20,7 +20,7 @@ type applicationDataSourceModel struct {
 	Status                types.String `tfsdk:"status"`
 	StatusReason          types.String `tfsdk:"status_reason"`
 	RequestID             types.Int64  `tfsdk:"request_id"`
-	ApplicationEntityID   types.Int64  `tfsdk:"application_entity_id"`
+	ApplicationEntityID   types.String `tfsdk:"application_entity_id"`
 	ApplicationID         types.String `tfsdk:"application_id"`
 	ApplicationObjectID   types.String `tfsdk:"application_object_id"`
 	BusinessJustification types.String `tfsdk:"business_justification"`
@@ -34,7 +34,7 @@ func (d *applicationDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 	response.Schema = schema.Schema{Description: "Reads an application created through the AZExecute Terraform API by its stable resource UUID.", Attributes: map[string]schema.Attribute{
 		"id": schema.StringAttribute{Required: true}, "display_name": schema.StringAttribute{Computed: true}, "description": schema.StringAttribute{Computed: true},
 		"status": schema.StringAttribute{Computed: true}, "status_reason": schema.StringAttribute{Computed: true}, "request_id": schema.Int64Attribute{Computed: true},
-		"application_entity_id": schema.Int64Attribute{Computed: true}, "application_id": schema.StringAttribute{Computed: true}, "application_object_id": schema.StringAttribute{Computed: true},
+		"application_entity_id": schema.StringAttribute{Computed: true, Description: "AZExecute application entity UUID."}, "application_id": schema.StringAttribute{Computed: true}, "application_object_id": schema.StringAttribute{Computed: true},
 		"business_justification": schema.StringAttribute{Computed: true},
 	}}
 }
@@ -57,7 +57,7 @@ func (d *applicationDataSource) Read(ctx context.Context, request datasource.Rea
 	state.Status = types.StringValue(result.Status)
 	state.StatusReason = stringTypeFromPointer(result.StatusReason)
 	state.RequestID = types.Int64Value(result.RequestID)
-	state.ApplicationEntityID = int64TypeFromPointer(result.ApplicationEntityID)
+	state.ApplicationEntityID = stringTypeFromPointer(result.ApplicationEntityID)
 	state.ApplicationID = stringTypeFromPointer(result.ApplicationID)
 	state.ApplicationObjectID = stringTypeFromPointer(result.ApplicationObjectID)
 	state.BusinessJustification = types.StringValue(result.Metadata.BusinessJustification)

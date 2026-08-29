@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- AZExecute application entity identifiers are UUID strings across resources,
+  data sources, internal permission targets, and imported state.
+- Existing provider state is upgraded automatically without recreating managed
+  applications.
+
 ## 0.5.0
 
 - Publishes the complete Terraform Registry reference for both application

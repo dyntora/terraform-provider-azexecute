@@ -244,10 +244,10 @@ func TestApplicationRequestMoveStateAcceptsSynchronousResource(t *testing.T) {
 		Raw:    tftypes.NewValue(targetSchema.Type().TerraformType(ctx), nil),
 		Schema: targetSchema,
 	}}
-	mover := (&applicationRequestResource{}).MoveState(ctx)[0]
+	mover := (&applicationRequestResource{}).MoveState(ctx)[1]
 	mover.StateMover(ctx, resource.MoveStateRequest{
 		SourceProviderAddress: "registry.terraform.io/dyntora/azexecute",
-		SourceSchemaVersion:   0,
+		SourceSchemaVersion:   1,
 		SourceState:           &sourceState,
 		SourceTypeName:        "azexecute_application",
 	}, &response)
@@ -261,6 +261,18 @@ func TestApplicationRequestMoveStateAcceptsSynchronousResource(t *testing.T) {
 	}
 	if target.ID != source.ID || target.DisplayName != source.DisplayName || target.Status != source.Status {
 		t.Fatalf("moved state lost resource values: %#v", target)
+	}
+}
+
+func TestLegacyApplicationEntityIDUpgradeMatchesDatabaseMigration(t *testing.T) {
+	t.Parallel()
+
+	upgraded := stringFromLegacyID(types.Int64Value(1358))
+	if upgraded.IsNull() || upgraded.IsUnknown() {
+		t.Fatal("legacy application entity identifier was not converted")
+	}
+	if got, want := upgraded.ValueString(), "99bf1d70-adcf-c5e0-315c-6519647f7e33"; got != want {
+		t.Fatalf("legacy identifier mapping mismatch: got %q, want %q", got, want)
 	}
 }
 
