@@ -44,6 +44,7 @@ type applicationResourceModel struct {
 	Environment                      types.String `tfsdk:"environment"`
 	ContactEmail                     types.String `tfsdk:"contact_email"`
 	ContactPhone                     types.String `tfsdk:"contact_phone"`
+	OwnerObjectIDs                   types.Set    `tfsdk:"owner_object_ids"`
 	APIPermissionRequests            types.Set    `tfsdk:"api_permission_request"`
 	ConfigureRegistration            types.Bool   `tfsdk:"configure_registration"`
 	SignInAudience                   types.String `tfsdk:"sign_in_audience"`
@@ -117,6 +118,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"environment":                        schema.StringAttribute{Optional: true},
 			"contact_email":                      schema.StringAttribute{Optional: true},
 			"contact_phone":                      schema.StringAttribute{Optional: true},
+			"owner_object_ids":                   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, Description: "Authoritative set of Microsoft Entra owner object UUIDs. Omit to adopt existing ownership; set an empty set to remove all owners."},
 			"configure_registration":             schema.BoolAttribute{Optional: true, Description: "Set true to manage the registration fields below."},
 			"sign_in_audience":                   schema.StringAttribute{Optional: true, Computed: true},
 			"is_fallback_public_client":          schema.BoolAttribute{Optional: true, Computed: true},
@@ -173,6 +175,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 func managedApplicationSchemaV0(includeWaitSettings bool) schema.Schema {
 	result := managedApplicationSchema(includeWaitSettings)
 	result.Version = 0
+	delete(result.Attributes, "owner_object_ids")
 	result.Attributes["application_entity_id"] = schema.Int64Attribute{Computed: true, Description: "AZExecute application entity identifier."}
 	permissionBlock := result.Blocks["api_permission_request"].(schema.SetNestedBlock)
 	permissionBlock.NestedObject.Attributes["target_application_entity_id"] = schema.Int64Attribute{Optional: true, Description: "AZExecute application entity identifier for an internal application."}
@@ -265,7 +268,7 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 		}
 	}
 
-	if boolValue(desired.ConfigureRegistration, false) {
+	if boolValue(desired.ConfigureRegistration, false) || setIsConfigured(desired.OwnerObjectIDs) {
 		update, updateErr := updateRequestFromModel(desired, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
@@ -383,7 +386,11 @@ func createRequestFromModel(ctx context.Context, model applicationResourceModel,
 			permissions = append(permissions, item)
 		}
 	}
-	return azclient.ApplicationCreate{ResourceID: resourceID, DisplayName: model.DisplayName.ValueString(), Description: stringPointer(model.Description), Metadata: metadata, APIPermissionRequests: permissions}, nil
+	owners, err := stringSetPointer(model.OwnerObjectIDs)
+	if err != nil {
+		return azclient.ApplicationCreate{}, err
+	}
+	return azclient.ApplicationCreate{ResourceID: resourceID, DisplayName: model.DisplayName.ValueString(), Description: stringPointer(model.Description), Metadata: metadata, OwnerObjectIDs: owners, APIPermissionRequests: permissions}, nil
 }
 
 func metadataFromModel(model applicationResourceModel) (azclient.ApplicationMetadata, error) {
@@ -410,7 +417,11 @@ func updateRequestFromModel(model applicationResourceModel, current *azclient.Ap
 	if err != nil {
 		return azclient.ApplicationUpdate{}, err
 	}
-	update := azclient.ApplicationUpdate{Metadata: metadata}
+	owners, err := stringSetPointer(model.OwnerObjectIDs)
+	if err != nil {
+		return azclient.ApplicationUpdate{}, err
+	}
+	update := azclient.ApplicationUpdate{Metadata: metadata, OwnerObjectIDs: owners}
 	if boolValue(model.ConfigureRegistration, false) {
 		if current.Registration == nil {
 			return update, fmt.Errorf("the tenant API did not return registration configuration; confirm the Terraform registration policy is enabled")
@@ -457,6 +468,9 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	target.Environment = stringTypeFromPointer(source.Metadata.Environment)
 	target.ContactEmail = stringTypeFromPointer(source.Metadata.ContactEmail)
 	target.ContactPhone = stringTypeFromPointer(source.Metadata.ContactPhone)
+	var ownerDiagnostics diag.Diagnostics
+	target.OwnerObjectIDs, ownerDiagnostics = types.SetValueFrom(ctx, types.StringType, source.OwnerObjectIDs)
+	diagnostics.Append(ownerDiagnostics...)
 	target.Status = types.StringValue(source.Status)
 	target.StatusReason = stringTypeFromPointer(source.StatusReason)
 	target.RequestID = types.Int64Value(source.RequestID)
@@ -499,6 +513,25 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 			target.RequestedAccessTokenVersion = types.Int64Null()
 		}
 	}
+}
+
+func setIsConfigured(value types.Set) bool {
+	return !value.IsNull() && !value.IsUnknown()
+}
+
+func stringSetPointer(value types.Set) (*[]string, error) {
+	if !setIsConfigured(value) {
+		return nil, nil
+	}
+	result := make([]string, 0, len(value.Elements()))
+	for _, element := range value.Elements() {
+		stringValue, ok := element.(types.String)
+		if !ok || stringValue.IsNull() || stringValue.IsUnknown() || stringValue.ValueString() == "" {
+			return nil, fmt.Errorf("owner_object_ids must contain non-empty UUID strings")
+		}
+		result = append(result, stringValue.ValueString())
+	}
+	return &result, nil
 }
 
 func expectedGoLiveDateValue(existing types.String, serverValue time.Time) types.String {

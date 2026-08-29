@@ -18,6 +18,7 @@ resource "azexecute_application_request" "deployment" {
   environment            = "Production"
   business_criticality   = 4
   contact_email          = "platform@example.com"
+  owner_object_ids       = ["11111111-2222-4333-8444-555555555555"]
 
   configure_registration         = true
   sign_in_audience               = "AzureADMyOrg"

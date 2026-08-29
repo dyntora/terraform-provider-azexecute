@@ -6,6 +6,7 @@ import (
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -24,6 +25,7 @@ type applicationDataSourceModel struct {
 	ApplicationID         types.String `tfsdk:"application_id"`
 	ApplicationObjectID   types.String `tfsdk:"application_object_id"`
 	BusinessJustification types.String `tfsdk:"business_justification"`
+	OwnerObjectIDs        types.Set    `tfsdk:"owner_object_ids"`
 }
 
 func NewApplicationDataSource() datasource.DataSource { return &applicationDataSource{} }
@@ -36,6 +38,7 @@ func (d *applicationDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 		"status": schema.StringAttribute{Computed: true}, "status_reason": schema.StringAttribute{Computed: true}, "request_id": schema.Int64Attribute{Computed: true},
 		"application_entity_id": schema.StringAttribute{Computed: true, Description: "AZExecute application entity UUID."}, "application_id": schema.StringAttribute{Computed: true}, "application_object_id": schema.StringAttribute{Computed: true},
 		"business_justification": schema.StringAttribute{Computed: true},
+		"owner_object_ids":       schema.SetAttribute{Computed: true, ElementType: types.StringType},
 	}}
 }
 func (d *applicationDataSource) Configure(_ context.Context, request datasource.ConfigureRequest, response *datasource.ConfigureResponse) {
@@ -61,5 +64,8 @@ func (d *applicationDataSource) Read(ctx context.Context, request datasource.Rea
 	state.ApplicationID = stringTypeFromPointer(result.ApplicationID)
 	state.ApplicationObjectID = stringTypeFromPointer(result.ApplicationObjectID)
 	state.BusinessJustification = types.StringValue(result.Metadata.BusinessJustification)
+	var ownerDiagnostics diag.Diagnostics
+	state.OwnerObjectIDs, ownerDiagnostics = types.SetValueFrom(ctx, types.StringType, result.OwnerObjectIDs)
+	response.Diagnostics.Append(ownerDiagnostics...)
 	response.Diagnostics.Append(response.State.Set(ctx, &state)...)
 }

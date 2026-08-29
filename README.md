@@ -11,6 +11,7 @@ Provider `0.6` supports:
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
 - tenant-driven application metadata;
+- authoritative customer-managed application owners with drift reconciliation;
 - external and internal API-permission requests;
 - account audience, identifier URIs, redirect URIs, token issuance, fallback
   public-client behavior, and requested access-token version;
@@ -59,8 +60,9 @@ terraform {
 provider "azexecute" {}
 
 resource "azexecute_application_request" "example" {
-  display_name = "platform-deployment-production"
-  description  = "Deployment identity managed through Terraform"
+  display_name     = "platform-deployment-production"
+  description      = "Deployment identity managed through Terraform"
+  owner_object_ids = ["11111111-2222-4333-8444-555555555555"]
 }
 
 output "status" {
@@ -113,6 +115,14 @@ reports missing values. The API validates the same current policy before it
 creates or changes anything, so an invalid request does not leave an orphaned
 approval item.
 
+## Ownership and Drift
+
+`owner_object_ids` is an authoritative set when configured. Terraform adds
+missing AZExecute owners and removes customer-managed owners no longer in the
+set from both AZExecute and Microsoft Entra. Manual owner changes made through
+AZExecute appear on the next refresh. Graph-only operational owners used by
+AZExecute are preserved so app-only lifecycle operations remain available.
+
 ## Development
 
 ```shell
@@ -126,7 +136,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.6.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.6.1`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

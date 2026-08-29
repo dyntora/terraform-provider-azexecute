@@ -161,6 +161,11 @@ func TestTenantControlledMetadataIsNeverStaticallyRequired(t *testing.T) {
 		t.Fatal("display_name must remain the only statically required top-level application field")
 	}
 
+	optional, required = attributeFlags(providerSchema.Attributes["owner_object_ids"])
+	if !optional || required {
+		t.Fatal("owner_object_ids must be optional so existing configurations remain backward compatible")
+	}
+
 	for name, attribute := range providerSchema.Attributes {
 		if name == "display_name" {
 			continue
@@ -293,5 +298,22 @@ func TestRegistrationUpdatePreservesUnmanagedFields(t *testing.T) {
 	}
 	if len(update.Registration.AppRoles) != 1 || len(update.Registration.API.Scopes) != 1 {
 		t.Fatal("unmanaged roles or scopes were not preserved")
+	}
+}
+
+func TestOwnerObjectIDsPreserveNullAndExplicitEmpty(t *testing.T) {
+	t.Parallel()
+
+	unmanaged, err := stringSetPointer(types.SetNull(types.StringType))
+	if err != nil || unmanaged != nil {
+		t.Fatalf("unmanaged owners changed unexpectedly: %#v, %v", unmanaged, err)
+	}
+	empty, diagnostics := types.SetValueFrom(context.Background(), types.StringType, []string{})
+	if diagnostics.HasError() {
+		t.Fatal(diagnostics)
+	}
+	managedEmpty, err := stringSetPointer(empty)
+	if err != nil || managedEmpty == nil || len(*managedEmpty) != 0 {
+		t.Fatalf("explicit empty owner set was not preserved: %#v, %v", managedEmpty, err)
 	}
 }

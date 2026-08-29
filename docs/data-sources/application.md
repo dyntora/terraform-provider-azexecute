@@ -50,6 +50,8 @@ output "client_id" {
   null until provisioning completes.
 - `business_justification` (String) — normalized business justification stored
   by AZExecute.
+- `owner_object_ids` (Set of String) — current Microsoft Entra owner object
+  UUIDs reported by AZExecute.
 
 Use a managed resource when Terraform should own updates or deletion. This data
 source is read-only.

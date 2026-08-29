@@ -20,12 +20,14 @@ type ApplicationCreate struct {
 	DisplayName           string                 `json:"displayName"`
 	Description           *string                `json:"description,omitempty"`
 	Metadata              ApplicationMetadata    `json:"metadata"`
+	OwnerObjectIDs        *[]string              `json:"ownerObjectIds,omitempty"`
 	APIPermissionRequests []APIPermissionRequest `json:"apiPermissionRequests"`
 }
 
 type ApplicationUpdate struct {
-	Metadata     ApplicationMetadata        `json:"metadata"`
-	Registration *RegistrationConfiguration `json:"registration,omitempty"`
+	Metadata       ApplicationMetadata        `json:"metadata"`
+	OwnerObjectIDs *[]string                  `json:"ownerObjectIds,omitempty"`
+	Registration   *RegistrationConfiguration `json:"registration,omitempty"`
 }
 
 type ApplicationMetadata struct {
@@ -80,6 +82,7 @@ type Application struct {
 	ApplicationObjectID   *string                    `json:"applicationObjectId,omitempty"`
 	DisplayName           string                     `json:"displayName"`
 	Description           *string                    `json:"description,omitempty"`
+	OwnerObjectIDs        []string                   `json:"ownerObjectIds"`
 	Metadata              ApplicationMetadata        `json:"metadata"`
 	Registration          *RegistrationConfiguration `json:"registration,omitempty"`
 	APIPermissionRequests []PermissionRequestStatus  `json:"apiPermissionRequests"`

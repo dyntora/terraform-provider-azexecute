@@ -150,7 +150,7 @@ func upgradeApplicationState(ctx context.Context, prior applicationResourceModel
 		ComplianceNotes: prior.ComplianceNotes, ExpectedGoLiveDate: prior.ExpectedGoLiveDate, ProjectName: prior.ProjectName, DepartmentOwner: prior.DepartmentOwner,
 		BusinessCriticality: prior.BusinessCriticality, RequiresElevatedPermissions: prior.RequiresElevatedPermissions,
 		ElevatedPermissionsJustification: prior.ElevatedPermissionsJustification, Environment: prior.Environment, ContactEmail: prior.ContactEmail,
-		ContactPhone: prior.ContactPhone, APIPermissionRequests: permissionRequests, ConfigureRegistration: prior.ConfigureRegistration,
+		ContactPhone: prior.ContactPhone, OwnerObjectIDs: types.SetNull(types.StringType), APIPermissionRequests: permissionRequests, ConfigureRegistration: prior.ConfigureRegistration,
 		SignInAudience: prior.SignInAudience, IsFallbackPublicClient: prior.IsFallbackPublicClient, IdentifierURIs: prior.IdentifierURIs,
 		WebHomePageURL: prior.WebHomePageURL, WebLogoutURL: prior.WebLogoutURL, WebEnableAccessTokenIssuance: prior.WebEnableAccessTokenIssuance,
 		WebEnableIDTokenIssuance: prior.WebEnableIDTokenIssuance, WebRedirectURIs: prior.WebRedirectURIs, SpaRedirectURIs: prior.SpaRedirectURIs,

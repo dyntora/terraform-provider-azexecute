@@ -39,6 +39,7 @@ type applicationRequestResourceModel struct {
 	Environment                      types.String `tfsdk:"environment"`
 	ContactEmail                     types.String `tfsdk:"contact_email"`
 	ContactPhone                     types.String `tfsdk:"contact_phone"`
+	OwnerObjectIDs                   types.Set    `tfsdk:"owner_object_ids"`
 	APIPermissionRequests            types.Set    `tfsdk:"api_permission_request"`
 	ConfigureRegistration            types.Bool   `tfsdk:"configure_registration"`
 	SignInAudience                   types.String `tfsdk:"sign_in_audience"`
@@ -125,7 +126,7 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 
 	// Automatic tenants can occasionally complete before POST returns. Apply registration
 	// settings immediately in that case; approval-based requests apply them on a later run.
-	if result.Status == "Ready" && boolValue(applicationPlan.ConfigureRegistration, false) {
+	if result.Status == "Ready" && (boolValue(applicationPlan.ConfigureRegistration, false) || setIsConfigured(applicationPlan.OwnerObjectIDs)) {
 		update, updateErr := updateRequestFromModel(applicationPlan, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
@@ -281,7 +282,7 @@ func (m applicationRequestResourceModel) toApplicationModel() applicationResourc
 		ComplianceNotes: m.ComplianceNotes, ExpectedGoLiveDate: m.ExpectedGoLiveDate, ProjectName: m.ProjectName, DepartmentOwner: m.DepartmentOwner,
 		BusinessCriticality: m.BusinessCriticality, RequiresElevatedPermissions: m.RequiresElevatedPermissions,
 		ElevatedPermissionsJustification: m.ElevatedPermissionsJustification, Environment: m.Environment, ContactEmail: m.ContactEmail,
-		ContactPhone: m.ContactPhone, APIPermissionRequests: m.APIPermissionRequests, ConfigureRegistration: m.ConfigureRegistration,
+		ContactPhone: m.ContactPhone, OwnerObjectIDs: m.OwnerObjectIDs, APIPermissionRequests: m.APIPermissionRequests, ConfigureRegistration: m.ConfigureRegistration,
 		SignInAudience: m.SignInAudience, IsFallbackPublicClient: m.IsFallbackPublicClient, IdentifierURIs: m.IdentifierURIs,
 		WebHomePageURL: m.WebHomePageURL, WebLogoutURL: m.WebLogoutURL, WebEnableAccessTokenIssuance: m.WebEnableAccessTokenIssuance,
 		WebEnableIDTokenIssuance: m.WebEnableIDTokenIssuance, WebRedirectURIs: m.WebRedirectURIs, SpaRedirectURIs: m.SpaRedirectURIs,
@@ -297,7 +298,7 @@ func (m *applicationRequestResourceModel) setFromApplicationModel(source applica
 	m.DataAccessRequirements, m.ComplianceNotes, m.ExpectedGoLiveDate = source.DataAccessRequirements, source.ComplianceNotes, source.ExpectedGoLiveDate
 	m.ProjectName, m.DepartmentOwner, m.BusinessCriticality = source.ProjectName, source.DepartmentOwner, source.BusinessCriticality
 	m.RequiresElevatedPermissions, m.ElevatedPermissionsJustification = source.RequiresElevatedPermissions, source.ElevatedPermissionsJustification
-	m.Environment, m.ContactEmail, m.ContactPhone = source.Environment, source.ContactEmail, source.ContactPhone
+	m.Environment, m.ContactEmail, m.ContactPhone, m.OwnerObjectIDs = source.Environment, source.ContactEmail, source.ContactPhone, source.OwnerObjectIDs
 	m.APIPermissionRequests, m.ConfigureRegistration = source.APIPermissionRequests, source.ConfigureRegistration
 	m.SignInAudience, m.IsFallbackPublicClient, m.IdentifierURIs = source.SignInAudience, source.IsFallbackPublicClient, source.IdentifierURIs
 	m.WebHomePageURL, m.WebLogoutURL = source.WebHomePageURL, source.WebLogoutURL

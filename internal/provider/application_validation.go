@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func (r *applicationResource) ModifyPlan(ctx context.Context, request resource.ModifyPlanRequest, response *resource.ModifyPlanResponse) {
 	if r.client == nil || request.Plan.Raw.IsNull() {
@@ -130,6 +133,15 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 	}
 	if value := modelIntOr(model.CreateTimeoutMinutes, 60); value < 1 || value > 1440 {
 		errors = append(errors, "create_timeout_minutes must be between 1 and 1440")
+	}
+	if setIsConfigured(model.OwnerObjectIDs) {
+		for _, element := range model.OwnerObjectIDs.Elements() {
+			value, ok := element.(types.String)
+			if !ok || value.IsNull() || value.IsUnknown() || !uuidPattern.MatchString(value.ValueString()) {
+				errors = append(errors, "owner_object_ids must contain Microsoft Entra object UUIDs")
+				break
+			}
+		}
 	}
 
 	return errors

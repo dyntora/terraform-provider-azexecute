@@ -30,6 +30,10 @@ resource "azexecute_application_request" "deployment" {
   environment            = "Production"
   business_criticality   = 4
   contact_email          = "platform@example.com"
+  owner_object_ids = [
+    "11111111-2222-4333-8444-555555555555",
+    "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  ]
 
   configure_registration         = true
   sign_in_audience               = "AzureADMyOrg"
@@ -117,6 +121,21 @@ policy can require an enabled field during plan and apply.
 - `environment` (String) — environment label, up to `50` characters.
 - `contact_email` (String) — valid contact email, up to `200` characters.
 - `contact_phone` (String) — contact telephone number, up to `20` characters.
+
+### Authoritative Owners
+
+- `owner_object_ids` (Set of String, Computed) — complete desired set of
+  Microsoft Entra owner object UUIDs. Apply adds missing owners and removes
+  AZExecute-managed owners not present in the set from both Microsoft Entra and
+  AZExecute. A refresh exposes manual owner changes made in AZExecute as
+  Terraform drift. Set `[]` to remove every customer-managed owner; omit the
+  argument to adopt current ownership. Graph-only operational identities used
+  by AZExecute are preserved so later app-only updates continue to work.
+
+Use directory object IDs rather than names, emails, client IDs, or AZExecute
+application entity IDs. New entries must resolve as tenant users. An automation
+service principal already registered in AZExecute, such as the calling Azure
+DevOps identity, can be retained by object ID.
 
 ### Optional Registration Configuration
 

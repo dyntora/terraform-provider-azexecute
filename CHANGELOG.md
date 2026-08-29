@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1
+
+- Adds authoritative application ownership through `owner_object_ids`.
+- Refresh detects manual owner changes; apply adds missing owners and removes
+  unexpected owners in both Microsoft Entra and AZExecute.
+- Expands the Azure DevOps test module to exercise every supported metadata,
+  registration, ownership, and permission-request option.
+
 ## 0.6.0
 
 - AZExecute application entity identifiers are UUID strings across resources,

@@ -60,7 +60,7 @@ resource_fields=(
   intended_audience data_access_requirements compliance_notes
   expected_go_live_date project_name department_owner business_criticality
   requires_elevated_permissions elevated_permissions_justification environment
-  contact_email contact_phone configure_registration sign_in_audience
+  contact_email contact_phone owner_object_ids configure_registration sign_in_audience
   is_fallback_public_client identifier_uris web_home_page_url web_logout_url
   web_enable_access_token_issuance web_enable_id_token_issuance
   web_redirect_uris spa_redirect_uris public_client_redirect_uris
@@ -81,7 +81,7 @@ capability_fields=(
 application_data_fields=(
   id display_name description status status_reason request_id
   application_entity_id application_id application_object_id
-  business_justification
+  business_justification owner_object_ids
 )
 
 for field in "${provider_fields[@]}"; do
