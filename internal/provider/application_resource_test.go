@@ -304,6 +304,122 @@ func TestRegistrationUpdatePreservesUnmanagedFields(t *testing.T) {
 	}
 }
 
+func TestManagedRegistrationMismatchesCoversTheCompleteRegistrationShape(t *testing.T) {
+	t.Parallel()
+	version := int64(2)
+	desired := applicationResourceModel{
+		ConfigureRegistration:        types.BoolValue(true),
+		SignInAudience:               types.StringValue("AzureADMyOrg"),
+		IsFallbackPublicClient:       types.BoolValue(false),
+		IdentifierURIs:               stringSet(t, "api://example"),
+		WebHomePageURL:               types.StringValue("https://www.azexecute.com"),
+		WebLogoutURL:                 types.StringValue("https://www.azexecute.com/logout"),
+		WebEnableAccessTokenIssuance: types.BoolValue(false),
+		WebEnableIDTokenIssuance:     types.BoolValue(true),
+		WebRedirectURIs:              stringSet(t, "https://www.azexecute.com/signin-oidc"),
+		SpaRedirectURIs:              stringSet(t, "https://www.azexecute.com/auth/callback"),
+		PublicClientRedirectURIs:     stringSet(t, "http://localhost"),
+		RequestedAccessTokenVersion:  types.Int64Value(version),
+	}
+	stale := &azclient.Application{Registration: &azclient.RegistrationConfiguration{
+		SignInAudience: "AzureADMultipleOrgs",
+		IdentifierUris: []azclient.URIValue{{Value: "api://old"}},
+		Web: azclient.WebConfiguration{
+			EnableAccessTokenIssuance: true,
+			EnableIDTokenIssuance:     false,
+			RedirectUris:              []azclient.RedirectURI{{Value: "https://old.example/signin"}},
+		},
+		Spa:          azclient.RedirectConfiguration{RedirectUris: []azclient.RedirectURI{{Value: "https://old.example/spa"}}},
+		PublicClient: azclient.RedirectConfiguration{RedirectUris: []azclient.RedirectURI{{Value: "custom://old"}}},
+		API:          azclient.APIConfiguration{},
+	}}
+
+	mismatches := managedRegistrationMismatches(desired, stale)
+	for _, field := range []string{
+		"sign_in_audience", "identifier_uris", "web_home_page_url", "web_logout_url",
+		"web_enable_access_token_issuance", "web_enable_id_token_issuance", "web_redirect_uris",
+		"spa_redirect_uris", "public_client_redirect_uris", "requested_access_token_version",
+	} {
+		if !containsString(mismatches, field) {
+			t.Errorf("registration mismatch did not include %s: %#v", field, mismatches)
+		}
+	}
+}
+
+func TestWaitForManagedRegistrationReloadsAStaleUpdateResponse(t *testing.T) {
+	t.Parallel()
+	const resourceID = "11111111-2222-4333-8444-555555555555"
+	version := int64(2)
+	homePage := "https://www.azexecute.com"
+	logout := "https://www.azexecute.com/logout"
+	desired := applicationResourceModel{
+		ConfigureRegistration:       types.BoolValue(true),
+		WebHomePageURL:              types.StringValue(homePage),
+		WebLogoutURL:                types.StringValue(logout),
+		WebEnableIDTokenIssuance:    types.BoolValue(true),
+		WebRedirectURIs:             stringSet(t, "https://www.azexecute.com/signin-oidc"),
+		SpaRedirectURIs:             stringSet(t, "https://www.azexecute.com/auth/callback"),
+		PublicClientRedirectURIs:    stringSet(t, "http://localhost"),
+		RequestedAccessTokenVersion: types.Int64Value(version),
+	}
+	confirmed := azclient.Application{
+		ResourceID: resourceID,
+		Status:     "Ready",
+		Registration: &azclient.RegistrationConfiguration{
+			Web: azclient.WebConfiguration{
+				HomePageURL:           &homePage,
+				LogoutURL:             &logout,
+				EnableIDTokenIssuance: true,
+				RedirectUris:          []azclient.RedirectURI{{Value: "https://www.azexecute.com/signin-oidc"}},
+			},
+			Spa:          azclient.RedirectConfiguration{RedirectUris: []azclient.RedirectURI{{Value: "https://www.azexecute.com/auth/callback"}}},
+			PublicClient: azclient.RedirectConfiguration{RedirectUris: []azclient.RedirectURI{{Value: "http://localhost"}}},
+			API:          azclient.APIConfiguration{RequestedAccessTokenVersion: &version},
+		},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/api/terraform/v1/applications/"+resourceID {
+			t.Errorf("unexpected convergence request: %s %s", request.Method, request.URL.Path)
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(confirmed)
+	}))
+	defer server.Close()
+	api, err := azclient.New(server.URL, "ignored", "token", nil, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := waitForManagedRegistration(
+		context.Background(), api, resourceID, desired,
+		&azclient.Application{ResourceID: resourceID, Status: "Ready", Registration: &azclient.RegistrationConfiguration{}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mismatches := managedRegistrationMismatches(desired, result); len(mismatches) != 0 {
+		t.Fatalf("confirmed registration still differs: %#v", mismatches)
+	}
+}
+
+func stringSet(t *testing.T, values ...string) types.Set {
+	t.Helper()
+	result, diagnostics := types.SetValueFrom(context.Background(), types.StringType, values)
+	if diagnostics.HasError() {
+		t.Fatal(diagnostics)
+	}
+	return result
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOwnerObjectIDsPreserveNullAndExplicitEmpty(t *testing.T) {
 	t.Parallel()
 

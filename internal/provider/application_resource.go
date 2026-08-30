@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"strings"
 	"time"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
@@ -285,6 +286,11 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 			response.Diagnostics.AddError("Unable to configure application registration", err.Error())
 			return
 		}
+		result, err = waitForManagedRegistration(ctx, r.client, resourceID, desired, result)
+		if err != nil {
+			response.Diagnostics.AddError("Application registration update did not converge", err.Error())
+			return
+		}
 	}
 
 	mapApplicationToModel(ctx, result, &desired, &response.Diagnostics)
@@ -348,6 +354,11 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update AZExecute application", err.Error())
+		return
+	}
+	result, err = waitForManagedRegistration(ctx, r.client, resourceID, plan, result)
+	if err != nil {
+		response.Diagnostics.AddError("Application registration update did not converge", err.Error())
 		return
 	}
 	mapApplicationToModel(ctx, result, &plan, &response.Diagnostics)
@@ -527,6 +538,134 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 			target.RequestedAccessTokenVersion = types.Int64Null()
 		}
 	}
+}
+
+// waitForManagedRegistration protects Terraform's plan/apply consistency contract
+// when an AZExecute API deployment or a Microsoft Graph replica returns the
+// pre-update registration immediately after accepting a write. The API normally
+// returns the confirmed write result, so the common path performs no extra GET.
+func waitForManagedRegistration(
+	ctx context.Context,
+	api *azclient.Client,
+	resourceID string,
+	desired applicationResourceModel,
+	observed *azclient.Application,
+) (*azclient.Application, error) {
+	if !boolValue(desired.ConfigureRegistration, false) {
+		return observed, nil
+	}
+
+	const maximumReadAttempts = 12
+	for attempt := 1; ; attempt++ {
+		mismatches := managedRegistrationMismatches(desired, observed)
+		if len(mismatches) == 0 {
+			return observed, nil
+		}
+		if attempt >= maximumReadAttempts {
+			return nil, fmt.Errorf(
+				"AZExecute accepted the update, but its read API still returned older values for %s after %d checks; retry apply after the API and Microsoft Entra replicas have converged",
+				strings.Join(mismatches, ", "), maximumReadAttempts)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+
+		var err error
+		observed, err = api.GetApplication(ctx, resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("reload AZExecute application after registration update: %w", err)
+		}
+	}
+}
+
+func managedRegistrationMismatches(desired applicationResourceModel, observed *azclient.Application) []string {
+	if observed == nil || observed.Registration == nil {
+		return []string{"registration"}
+	}
+
+	registration := observed.Registration
+	mismatches := make([]string, 0, 11)
+	if configuredStringDiffers(desired.SignInAudience, registration.SignInAudience) {
+		mismatches = append(mismatches, "sign_in_audience")
+	}
+	if configuredBoolDiffers(desired.IsFallbackPublicClient, registration.IsFallbackPublicClient) {
+		mismatches = append(mismatches, "is_fallback_public_client")
+	}
+	if configuredSetDiffers(desired.IdentifierURIs, uriStrings(registration.IdentifierUris)) {
+		mismatches = append(mismatches, "identifier_uris")
+	}
+	if configuredOptionalStringDiffers(desired.WebHomePageURL, registration.Web.HomePageURL) {
+		mismatches = append(mismatches, "web_home_page_url")
+	}
+	if configuredOptionalStringDiffers(desired.WebLogoutURL, registration.Web.LogoutURL) {
+		mismatches = append(mismatches, "web_logout_url")
+	}
+	if configuredBoolDiffers(desired.WebEnableAccessTokenIssuance, registration.Web.EnableAccessTokenIssuance) {
+		mismatches = append(mismatches, "web_enable_access_token_issuance")
+	}
+	if configuredBoolDiffers(desired.WebEnableIDTokenIssuance, registration.Web.EnableIDTokenIssuance) {
+		mismatches = append(mismatches, "web_enable_id_token_issuance")
+	}
+	if configuredSetDiffers(desired.WebRedirectURIs, redirectStrings(registration.Web.RedirectUris)) {
+		mismatches = append(mismatches, "web_redirect_uris")
+	}
+	if configuredSetDiffers(desired.SpaRedirectURIs, redirectStrings(registration.Spa.RedirectUris)) {
+		mismatches = append(mismatches, "spa_redirect_uris")
+	}
+	if configuredSetDiffers(desired.PublicClientRedirectURIs, redirectStrings(registration.PublicClient.RedirectUris)) {
+		mismatches = append(mismatches, "public_client_redirect_uris")
+	}
+	if !desired.RequestedAccessTokenVersion.IsNull() && !desired.RequestedAccessTokenVersion.IsUnknown() &&
+		(registration.API.RequestedAccessTokenVersion == nil ||
+			*registration.API.RequestedAccessTokenVersion != desired.RequestedAccessTokenVersion.ValueInt64()) {
+		mismatches = append(mismatches, "requested_access_token_version")
+	}
+	return mismatches
+}
+
+func configuredStringDiffers(desired types.String, observed string) bool {
+	return !desired.IsNull() && !desired.IsUnknown() && desired.ValueString() != observed
+}
+
+func configuredOptionalStringDiffers(desired types.String, observed *string) bool {
+	if desired.IsNull() || desired.IsUnknown() {
+		return false
+	}
+	actual := ""
+	if observed != nil {
+		actual = *observed
+	}
+	return desired.ValueString() != actual
+}
+
+func configuredBoolDiffers(desired types.Bool, observed bool) bool {
+	return !desired.IsNull() && !desired.IsUnknown() && desired.ValueBool() != observed
+}
+
+func configuredSetDiffers(desired types.Set, observed []string) bool {
+	if desired.IsNull() || desired.IsUnknown() {
+		return false
+	}
+	if len(desired.Elements()) != len(observed) {
+		return true
+	}
+	actual := make(map[string]struct{}, len(observed))
+	for _, value := range observed {
+		actual[value] = struct{}{}
+	}
+	for _, element := range desired.Elements() {
+		value, ok := element.(types.String)
+		if !ok || value.IsNull() || value.IsUnknown() {
+			return true
+		}
+		if _, exists := actual[value.ValueString()]; !exists {
+			return true
+		}
+	}
+	return false
 }
 
 func setIsConfigured(value types.Set) bool {

@@ -110,6 +110,12 @@ ordinary update. Earlier builds could show `id`, `request_id`, application IDs,
 status, and tenant-defaulted metadata as `(known after apply)` and could then
 call the collection endpoint without a resource UUID, resulting in HTTP 405.
 
+Provider `0.7.1` also protects registration updates from Microsoft Graph
+replication delay. It verifies every managed registration field and retries a
+stale post-update read before writing Terraform state. Deploy the matching
+AZExecute API build so the update endpoint returns the configuration that
+Microsoft Entra already confirmed.
+
 Run `terraform init -upgrade`, confirm provider `0.7.0` or newer, and apply the
 one real registration or metadata change left in the plan. The following plan
 should be empty when AZExecute returns the configured values. If real drift is

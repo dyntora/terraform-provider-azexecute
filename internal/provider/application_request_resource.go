@@ -137,6 +137,11 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 			response.Diagnostics.AddError("Unable to configure approved application registration", err.Error())
 			return
 		}
+		result, err = waitForManagedRegistration(ctx, r.client, result.ResourceID, applicationPlan, result)
+		if err != nil {
+			response.Diagnostics.AddError("Application registration update did not converge", err.Error())
+			return
+		}
 	}
 
 	mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
@@ -203,6 +208,11 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update approved AZExecute application", err.Error())
+		return
+	}
+	result, err = waitForManagedRegistration(ctx, r.client, resourceID, plan.toApplicationModel(), result)
+	if err != nil {
+		response.Diagnostics.AddError("Application registration update did not converge", err.Error())
 		return
 	}
 

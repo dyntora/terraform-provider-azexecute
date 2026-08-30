@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1
+
+- Fixes registration updates failing with `Provider produced inconsistent
+  result after apply` when an immediate AZExecute or Microsoft Graph read
+  returns the pre-update registration.
+- Verifies every managed registration field after updates and retries stale
+  reads before committing Terraform state.
+- Works with the matching AZExecute API change that returns the confirmed
+  Microsoft Entra write result instead of replacing it with a stale replica
+  read.
+
 ## 0.7.0
 
 - Fixes perpetual update plans by retaining stable computed state during
