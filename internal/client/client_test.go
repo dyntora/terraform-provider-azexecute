@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -112,5 +113,39 @@ func TestRejectsInsecureRemoteEndpoint(t *testing.T) {
 	t.Parallel()
 	if _, err := New("http://example.com", "scope", "token", nil, time.Second); err == nil {
 		t.Fatal("expected insecure endpoint to be rejected")
+	}
+}
+
+func TestApplicationOwnerUsesAtomicChildEndpoints(t *testing.T) {
+	t.Parallel()
+	const resourceID = "11111111-2222-4333-8444-555555555555"
+	const ownerID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	var methods []string
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/terraform/v1/applications/"+resourceID+"/owners/"+ownerID {
+			t.Errorf("unexpected owner path: %s", request.URL.Path)
+		}
+		methods = append(methods, request.Method)
+		if request.Method == http.MethodDelete {
+			response.WriteHeader(http.StatusNoContent)
+			return
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(ApplicationOwner{ResourceID: resourceID, OwnerObjectID: ownerID})
+	}))
+	defer server.Close()
+
+	api, _ := New(server.URL, "ignored", "token", nil, time.Second)
+	if _, err := api.AddApplicationOwner(context.Background(), resourceID, ownerID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := api.GetApplicationOwner(context.Background(), resourceID, ownerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.RemoveApplicationOwner(context.Background(), resourceID, ownerID); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(methods, ","); got != "PUT,GET,DELETE" {
+		t.Fatalf("unexpected method sequence: %s", got)
 	}
 }

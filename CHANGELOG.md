@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0
+
+- Fixes perpetual update plans by retaining stable computed state during
+  in-place changes.
+- Fixes HTTP 405 failures during updates by reading the stable resource UUID
+  from existing Terraform state rather than an unknown planned value.
+- Adds `azexecute_application_owner` for atomic, independently managed owners
+  on pending requests and provisioned applications.
+- Supports inline authoritative ownership, individual owner resources, or
+  unmanaged ownership without unsafe read-modify-write races.
+- Documents native Terraform `lifecycle.ignore_changes` behavior and ownership
+  mode conflicts.
+
 ## 0.6.1
 
 - Adds authoritative application ownership through `owner_object_ids`.

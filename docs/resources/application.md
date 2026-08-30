@@ -136,6 +136,14 @@ Use directory object IDs rather than names, emails, client IDs, or AZExecute
 application entity IDs. New entries must resolve as tenant users. An automation
 service principal already registered in AZExecute can be retained by object ID.
 
+Alternatively, omit `owner_object_ids` and manage owners independently with
+[`azexecute_application_owner`](application_owner.md). Never combine the inline
+authoritative set with individual owner resources for the same application.
+
+Terraform's native `lifecycle.ignore_changes` supports intentionally unmanaged
+inline metadata, registration fields, owner sets, and permission-request
+blocks. Ignored values remain readable in state but are not restored by apply.
+
 ### Optional Registration Configuration
 
 Registration arguments are used only when `configure_registration = true` and

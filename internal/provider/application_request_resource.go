@@ -170,12 +170,20 @@ func (r *applicationRequestResource) Read(ctx context.Context, request resource.
 
 func (r *applicationRequestResource) Update(ctx context.Context, request resource.UpdateRequest, response *resource.UpdateResponse) {
 	var plan applicationRequestResourceModel
+	var state applicationRequestResourceModel
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
+	response.Diagnostics.Append(request.State.Get(ctx, &state)...)
 	if response.Diagnostics.HasError() || r.client == nil {
 		return
 	}
 
-	current, err := r.client.GetApplication(ctx, plan.ID.ValueString())
+	resourceID := state.ID.ValueString()
+	if resourceID == "" {
+		response.Diagnostics.AddError("Unable to update AZExecute application request", "The existing Terraform state does not contain a resource ID. Import the resource again before updating it.")
+		return
+	}
+	plan.ID = state.ID
+	current, err := r.client.GetApplication(ctx, resourceID)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to read AZExecute application request before update", err.Error())
 		return
@@ -192,7 +200,7 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 		response.Diagnostics.AddError("Invalid approved application update", err.Error())
 		return
 	}
-	result, err := r.client.UpdateApplication(ctx, plan.ID.ValueString(), update)
+	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update approved AZExecute application", err.Error())
 		return

@@ -89,6 +89,11 @@ type Application struct {
 	CreatedOn             *time.Time                 `json:"createdOn,omitempty"`
 }
 
+type ApplicationOwner struct {
+	ResourceID    string `json:"resourceId"`
+	OwnerObjectID string `json:"ownerObjectId"`
+}
+
 type RegistrationConfiguration struct {
 	ApplicationID          string                `json:"applicationId"`
 	ApplicationObjectID    string                `json:"applicationObjectId"`

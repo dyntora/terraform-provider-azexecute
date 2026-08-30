@@ -11,6 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -97,14 +99,18 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 
 func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	replaceString := []planmodifier.String{stringplanmodifier.RequiresReplace()}
+	useStringState := []planmodifier.String{stringplanmodifier.UseStateForUnknown()}
+	useBoolState := []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}
+	useInt64State := []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}
+	useSetState := []planmodifier.Set{setplanmodifier.UseStateForUnknown()}
 	result := schema.Schema{
 		Version:     1,
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
-			"id":                                 schema.StringAttribute{Computed: true, Description: "Stable Terraform resource UUID used for API idempotency."},
+			"id":                                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Stable Terraform resource UUID used for API idempotency."},
 			"display_name":                       schema.StringAttribute{Required: true, PlanModifiers: replaceString},
 			"description":                        schema.StringAttribute{Optional: true, PlanModifiers: replaceString},
-			"business_justification":             schema.StringAttribute{Optional: true, Computed: true, Description: "Business reason for the application. Required only when the tenant metadata policy requires it."},
+			"business_justification":             schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState, Description: "Business reason for the application. Required only when the tenant metadata policy requires it."},
 			"technical_requirements":             schema.StringAttribute{Optional: true},
 			"intended_audience":                  schema.StringAttribute{Optional: true},
 			"data_access_requirements":           schema.StringAttribute{Optional: true},
@@ -112,33 +118,33 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"expected_go_live_date":              schema.StringAttribute{Optional: true, Description: "RFC 3339 date or timestamp."},
 			"project_name":                       schema.StringAttribute{Optional: true},
 			"department_owner":                   schema.StringAttribute{Optional: true},
-			"business_criticality":               schema.Int64Attribute{Optional: true, Computed: true, Description: "Value from 1 to 5; defaults to 3."},
-			"requires_elevated_permissions":      schema.BoolAttribute{Optional: true, Computed: true},
+			"business_criticality":               schema.Int64Attribute{Optional: true, Computed: true, PlanModifiers: useInt64State, Description: "Value from 1 to 5; defaults to 3."},
+			"requires_elevated_permissions":      schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: useBoolState},
 			"elevated_permissions_justification": schema.StringAttribute{Optional: true},
 			"environment":                        schema.StringAttribute{Optional: true},
 			"contact_email":                      schema.StringAttribute{Optional: true},
 			"contact_phone":                      schema.StringAttribute{Optional: true},
-			"owner_object_ids":                   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, Description: "Authoritative set of Microsoft Entra owner object UUIDs. Omit to adopt existing ownership; set an empty set to remove all owners."},
+			"owner_object_ids":                   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState, Description: "Authoritative set of Microsoft Entra owner object UUIDs. Omit to adopt existing ownership; set an empty set to remove all owners."},
 			"configure_registration":             schema.BoolAttribute{Optional: true, Description: "Set true to manage the registration fields below."},
-			"sign_in_audience":                   schema.StringAttribute{Optional: true, Computed: true},
-			"is_fallback_public_client":          schema.BoolAttribute{Optional: true, Computed: true},
-			"identifier_uris":                    schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
-			"web_home_page_url":                  schema.StringAttribute{Optional: true, Computed: true},
-			"web_logout_url":                     schema.StringAttribute{Optional: true, Computed: true},
-			"web_enable_access_token_issuance":   schema.BoolAttribute{Optional: true, Computed: true},
-			"web_enable_id_token_issuance":       schema.BoolAttribute{Optional: true, Computed: true},
-			"web_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
-			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
-			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType},
-			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true},
+			"sign_in_audience":                   schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState},
+			"is_fallback_public_client":          schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: useBoolState},
+			"identifier_uris":                    schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
+			"web_home_page_url":                  schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState},
+			"web_logout_url":                     schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState},
+			"web_enable_access_token_issuance":   schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: useBoolState},
+			"web_enable_id_token_issuance":       schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: useBoolState},
+			"web_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
+			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
+			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
+			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true, PlanModifiers: useInt64State},
 			"poll_interval_seconds":              schema.Int64Attribute{Optional: true, Description: "Automatic-provisioning poll interval; defaults to 5."},
 			"create_timeout_minutes":             schema.Int64Attribute{Optional: true, Description: "Maximum wait for automatic provisioning; defaults to 60."},
-			"status":                             schema.StringAttribute{Computed: true},
-			"status_reason":                      schema.StringAttribute{Computed: true},
-			"request_id":                         schema.Int64Attribute{Computed: true},
-			"application_entity_id":              schema.StringAttribute{Computed: true, Description: "AZExecute application entity UUID."},
-			"application_id":                     schema.StringAttribute{Computed: true, Description: "Microsoft Entra application (client) ID."},
-			"application_object_id":              schema.StringAttribute{Computed: true, Description: "Microsoft Entra application object ID."},
+			"status":                             schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
+			"status_reason":                      schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
+			"request_id":                         schema.Int64Attribute{Computed: true, PlanModifiers: useInt64State},
+			"application_entity_id":              schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "AZExecute application entity UUID."},
+			"application_id":                     schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application (client) ID."},
+			"application_object_id":              schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application object ID."},
 		},
 		Blocks: map[string]schema.Block{
 			"api_permission_request": schema.SetNestedBlock{
@@ -311,11 +317,19 @@ func (r *applicationResource) Read(ctx context.Context, request resource.ReadReq
 
 func (r *applicationResource) Update(ctx context.Context, request resource.UpdateRequest, response *resource.UpdateResponse) {
 	var plan applicationResourceModel
+	var state applicationResourceModel
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
+	response.Diagnostics.Append(request.State.Get(ctx, &state)...)
 	if response.Diagnostics.HasError() || r.client == nil {
 		return
 	}
-	current, err := r.client.GetApplication(ctx, plan.ID.ValueString())
+	resourceID := state.ID.ValueString()
+	if resourceID == "" {
+		response.Diagnostics.AddError("Unable to update AZExecute application", "The existing Terraform state does not contain a resource ID. Import the resource again before updating it.")
+		return
+	}
+	plan.ID = state.ID
+	current, err := r.client.GetApplication(ctx, resourceID)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to read AZExecute application before update", err.Error())
 		return
@@ -331,7 +345,7 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 		response.Diagnostics.AddError("Invalid application update", err.Error())
 		return
 	}
-	result, err := r.client.UpdateApplication(ctx, plan.ID.ValueString(), update)
+	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update AZExecute application", err.Error())
 		return

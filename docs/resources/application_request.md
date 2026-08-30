@@ -137,6 +137,37 @@ application entity IDs. New entries must resolve as tenant users. An automation
 service principal already registered in AZExecute, such as the calling Azure
 DevOps identity, can be retained by object ID.
 
+Alternatively, omit `owner_object_ids` and manage owners independently with
+[`azexecute_application_owner`](application_owner.md). Never combine the inline
+authoritative set with individual owner resources for the same application.
+
+### Ignoring Selected Drift
+
+Terraform's native lifecycle rules can intentionally leave selected inline
+settings under manual control:
+
+```terraform
+resource "azexecute_application_request" "example" {
+  display_name     = "platform-production"
+  owner_object_ids = var.initial_owners
+
+  lifecycle {
+    ignore_changes = [
+      owner_object_ids,
+      business_justification,
+      web_redirect_uris,
+      api_permission_request,
+    ]
+  }
+}
+```
+
+Ignored attributes are still read and exposed in state, but Terraform does not
+plan to restore their configured values. Do not ignore tenant-required metadata
+unless another process guarantees it remains valid. To ignore ownership
+completely, omit `owner_object_ids` and do not create individual owner
+resources.
+
 ### Optional Registration Configuration
 
 Registration arguments are used only when `configure_registration = true` and

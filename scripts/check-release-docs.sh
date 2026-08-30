@@ -23,6 +23,7 @@ required_files=(
   docs/index.md
   docs/resources/application.md
   docs/resources/application_request.md
+  docs/resources/application_owner.md
   docs/data-sources/application.md
   docs/data-sources/capabilities.md
   docs/guides/getting-started.md
@@ -36,6 +37,7 @@ required_files=(
   examples/migration/moved.tf
   examples/resources/azexecute_application/resource.tf
   examples/resources/azexecute_application_request/resource.tf
+  examples/resources/azexecute_application_owner/resource.tf
 )
 
 for file in "${required_files[@]}"; do
@@ -111,6 +113,10 @@ grep -Fq "version = \"~> $minor_version\"" examples/provider/provider.tf || fail
 grep -Fq 'NewApplicationRequestResource' internal/provider/provider.go || fail "approval-aware resource is not registered"
 grep -Fq '"_application_request"' internal/provider/application_request_resource.go || fail "approval-aware resource type name is missing"
 grep -Fq 'azexecute_application_request' docs/resources/application_request.md || fail "approval-aware resource documentation is missing"
+grep -Fq 'NewApplicationOwnerResource' internal/provider/provider.go || fail "individual owner resource is not registered"
+for field in id application_resource_id owner_object_id; do
+  grep -Fq "\`$field\`" docs/resources/application_owner.md || fail "owner resource field $field is undocumented"
+done
 
 if grep -R -n -E 'version = "~> 0\.[0-4]|Provider `0\.[0-4]`|Provider version 0\.[0-4]|migration-v0\.[0-4]' README.md docs examples; then
   fail "stale pre-0.5 release references remain"

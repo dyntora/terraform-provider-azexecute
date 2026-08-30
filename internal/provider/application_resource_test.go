@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -315,5 +318,86 @@ func TestOwnerObjectIDsPreserveNullAndExplicitEmpty(t *testing.T) {
 	managedEmpty, err := stringSetPointer(empty)
 	if err != nil || managedEmpty == nil || len(*managedEmpty) != 0 {
 		t.Fatalf("explicit empty owner set was not preserved: %#v, %v", managedEmpty, err)
+	}
+}
+
+func TestApplicationOwnerImportIdentityRoundTrip(t *testing.T) {
+	t.Parallel()
+	resourceID := "11111111-2222-4333-8444-555555555555"
+	ownerID := "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE"
+	composite := ownerResourceID(resourceID, ownerID)
+	parsedResourceID, parsedOwnerID, ok := splitOwnerResourceID(composite)
+	if !ok {
+		t.Fatal("valid owner import identity was rejected")
+	}
+	if parsedResourceID != resourceID || parsedOwnerID != strings.ToLower(ownerID) {
+		t.Fatalf("owner identity changed unexpectedly: %s / %s", parsedResourceID, parsedOwnerID)
+	}
+	if _, _, ok := splitOwnerResourceID(resourceID); ok {
+		t.Fatal("owner import identity without owner UUID was accepted")
+	}
+}
+
+func TestApplicationRequestUpdateUsesStateIDWhenPlanIDIsUnknown(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	const resourceID = "11111111-2222-4333-8444-555555555555"
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		paths = append(paths, request.Method+" "+request.URL.Path)
+		if request.URL.Path != "/api/terraform/v1/applications/"+resourceID {
+			response.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		application := azclient.Application{
+			ResourceID:  resourceID,
+			RequestID:   42,
+			Status:      "Ready",
+			DisplayName: "Stable application",
+			Metadata: azclient.ApplicationMetadata{
+				BusinessJustification: "Stable justification",
+				BusinessCriticality:   3,
+			},
+		}
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(application)
+	}))
+	defer server.Close()
+	api, err := azclient.New(server.URL, "ignored", "token", nil, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	providerSchema := managedApplicationSchema(false)
+	plan := tfsdk.Plan{Raw: tftypes.NewValue(providerSchema.Type().TerraformType(ctx), nil), Schema: providerSchema}
+	state := tfsdk.State{Raw: tftypes.NewValue(providerSchema.Type().TerraformType(ctx), nil), Schema: providerSchema}
+	for attribute, value := range map[string]any{
+		"display_name":                  "Stable application",
+		"business_justification":        "Stable justification",
+		"business_criticality":          int64(3),
+		"configure_registration":        false,
+		"requires_elevated_permissions": false,
+	} {
+		if diagnostics := plan.SetAttribute(ctx, path.Root(attribute), value); diagnostics.HasError() {
+			t.Fatalf("unable to set plan attribute %s: %#v", attribute, diagnostics)
+		}
+	}
+	if diagnostics := plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown()); diagnostics.HasError() {
+		t.Fatalf("unable to make planned id unknown: %#v", diagnostics)
+	}
+	if diagnostics := state.SetAttribute(ctx, path.Root("id"), resourceID); diagnostics.HasError() {
+		t.Fatalf("unable to set state id: %#v", diagnostics)
+	}
+
+	updateResponse := resource.UpdateResponse{State: tfsdk.State{
+		Raw:    tftypes.NewValue(providerSchema.Type().TerraformType(ctx), nil),
+		Schema: providerSchema,
+	}}
+	(&applicationRequestResource{client: api}).Update(ctx, resource.UpdateRequest{Plan: plan, State: state}, &updateResponse)
+	if updateResponse.Diagnostics.HasError() {
+		t.Fatalf("update failed: %#v", updateResponse.Diagnostics)
+	}
+	if got := strings.Join(paths, ","); got != "GET /api/terraform/v1/applications/"+resourceID+",PUT /api/terraform/v1/applications/"+resourceID {
+		t.Fatalf("update did not use the stable state id: %s", got)
 	}
 }

@@ -33,7 +33,7 @@ terraform providers
 terraform init -upgrade
 ```
 
-Verify the configuration requires `dyntora/azexecute` `~> 0.6` and inspect
+Verify the configuration requires `dyntora/azexecute` `~> 0.7` and inspect
 `.terraform.lock.hcl`. CI/CD caches and mirrors must also contain the selected
 release. Provider `0.5.0` is the first release containing the complete Registry
 reference and the approval-aware resource documentation in the same tag.
@@ -102,6 +102,19 @@ A conflict can mean:
 
 Refresh state, inspect the existing request in AZExecute, and rerun plan. Do not
 manually invent or reuse resource UUIDs.
+
+## A No-Change Run Plans an Update
+
+Provider `0.7.0` preserves stable computed identifiers and status during an
+ordinary update. Earlier builds could show `id`, `request_id`, application IDs,
+status, and tenant-defaulted metadata as `(known after apply)` and could then
+call the collection endpoint without a resource UUID, resulting in HTTP 405.
+
+Run `terraform init -upgrade`, confirm provider `0.7.0` or newer, and apply the
+one real registration or metadata change left in the plan. The following plan
+should be empty when AZExecute returns the configured values. If real drift is
+intentional, use `lifecycle.ignore_changes` on the selected inline attributes,
+or omit ownership management entirely instead of hiding all resource changes.
 
 ## Destroy Is Denied
 

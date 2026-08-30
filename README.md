@@ -6,12 +6,13 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.6` supports:
+Provider `0.7` supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
 - tenant-driven application metadata;
 - authoritative customer-managed application owners with drift reconciliation;
+- individually managed application-owner resources for `for_each` workflows;
 - external and internal API-permission requests;
 - account audience, identifier URIs, redirect URIs, token issuance, fallback
   public-client behavior, and requested access-token version;
@@ -35,6 +36,7 @@ The complete Registry-facing documentation is maintained with the provider:
 - [Approval and provisioning workflows](docs/guides/approval-workflows.md)
 - [`azexecute_application_request`](docs/resources/application_request.md)
 - [`azexecute_application`](docs/resources/application.md)
+- [`azexecute_application_owner`](docs/resources/application_owner.md)
 - [`azexecute_capabilities`](docs/data-sources/capabilities.md)
 - [`azexecute_application` data source](docs/data-sources/application.md)
 - [Upgrade and state migration](docs/guides/migration-v0.5.md)
@@ -52,7 +54,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.6"
+      version = "~> 0.7"
     }
   }
 }
@@ -123,6 +125,12 @@ set from both AZExecute and Microsoft Entra. Manual owner changes made through
 AZExecute appear on the next refresh. Graph-only operational owners used by
 AZExecute are preserved so app-only lifecycle operations remain available.
 
+For independently managed owners, omit `owner_object_ids` and use one
+`azexecute_application_owner` per owner. Do not use both ownership modes on the
+same application. Standard Terraform `lifecycle.ignore_changes` is supported
+for inline attributes and nested blocks when selected settings are intentionally
+managed outside Terraform.
+
 ## Development
 
 ```shell
@@ -136,7 +144,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.6.1`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.7.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

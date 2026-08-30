@@ -90,6 +90,23 @@ func (c *Client) UpdateApplication(ctx context.Context, resourceID string, reque
 	return &result, c.do(ctx, http.MethodPut, path, request, &result)
 }
 
+func (c *Client) GetApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) (*ApplicationOwner, error) {
+	var result ApplicationOwner
+	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID) + "/owners/" + url.PathEscape(ownerObjectID)
+	return &result, c.do(ctx, http.MethodGet, path, nil, &result)
+}
+
+func (c *Client) AddApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) (*ApplicationOwner, error) {
+	var result ApplicationOwner
+	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID) + "/owners/" + url.PathEscape(ownerObjectID)
+	return &result, c.do(ctx, http.MethodPut, path, nil, &result)
+}
+
+func (c *Client) RemoveApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) error {
+	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID) + "/owners/" + url.PathEscape(ownerObjectID)
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
 func (c *Client) DeleteApplication(ctx context.Context, resourceID string) error {
 	return c.do(ctx, http.MethodDelete, "api/terraform/v1/applications/"+url.PathEscape(resourceID), nil, nil)
 }
