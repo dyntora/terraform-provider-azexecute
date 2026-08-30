@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -61,6 +63,7 @@ type applicationResourceModel struct {
 	SpaRedirectURIs                  types.Set    `tfsdk:"spa_redirect_uris"`
 	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
 	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
+	AppRoles                         types.Set    `tfsdk:"app_roles"`
 	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
 	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
 	Status                           types.String `tfsdk:"status"`
@@ -88,6 +91,16 @@ type permissionModel struct {
 	RequiresAdminConsent types.Bool   `tfsdk:"requires_admin_consent"`
 }
 
+type appRoleModel struct {
+	ID                  types.String `tfsdk:"id"`
+	DisplayName         types.String `tfsdk:"display_name"`
+	Value               types.String `tfsdk:"value"`
+	Description         types.String `tfsdk:"description"`
+	IsEnabled           types.Bool   `tfsdk:"is_enabled"`
+	AllowUsersAndGroups types.Bool   `tfsdk:"allow_users_and_groups"`
+	AllowApplications   types.Bool   `tfsdk:"allow_applications"`
+}
+
 func NewApplicationResource() resource.Resource { return &applicationResource{} }
 
 func (r *applicationResource) Metadata(_ context.Context, request resource.MetadataRequest, response *resource.MetadataResponse) {
@@ -105,7 +118,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	useInt64State := []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}
 	useSetState := []planmodifier.Set{setplanmodifier.UseStateForUnknown()}
 	result := schema.Schema{
-		Version:     1,
+		Version:     2,
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
 			"id":                                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Stable Terraform resource UUID used for API idempotency."},
@@ -138,14 +151,27 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true, PlanModifiers: useInt64State},
-			"poll_interval_seconds":              schema.Int64Attribute{Optional: true, Description: "Automatic-provisioning poll interval; defaults to 5."},
-			"create_timeout_minutes":             schema.Int64Attribute{Optional: true, Description: "Maximum wait for automatic provisioning; defaults to 60."},
-			"status":                             schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
-			"status_reason":                      schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
-			"request_id":                         schema.Int64Attribute{Computed: true, PlanModifiers: useInt64State},
-			"application_entity_id":              schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "AZExecute application entity UUID."},
-			"application_id":                     schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application (client) ID."},
-			"application_object_id":              schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application object ID."},
+			"app_roles": schema.SetNestedAttribute{
+				Optional:    true,
+				Description: "Authoritative app-role definitions. Omit to preserve existing roles; set [] to remove all roles.",
+				NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+					"id":                     schema.StringAttribute{Required: true, Description: "Stable app-role UUID."},
+					"display_name":           schema.StringAttribute{Required: true},
+					"value":                  schema.StringAttribute{Required: true, Description: "Role value emitted in tokens."},
+					"description":            schema.StringAttribute{Required: true},
+					"is_enabled":             schema.BoolAttribute{Required: true},
+					"allow_users_and_groups": schema.BoolAttribute{Required: true},
+					"allow_applications":     schema.BoolAttribute{Required: true},
+				}},
+			},
+			"poll_interval_seconds":  schema.Int64Attribute{Optional: true, Description: "Automatic-provisioning poll interval; defaults to 5."},
+			"create_timeout_minutes": schema.Int64Attribute{Optional: true, Description: "Maximum wait for automatic provisioning; defaults to 60."},
+			"status":                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
+			"status_reason":          schema.StringAttribute{Computed: true, PlanModifiers: useStringState},
+			"request_id":             schema.Int64Attribute{Computed: true, PlanModifiers: useInt64State},
+			"application_entity_id":  schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "AZExecute application entity UUID."},
+			"application_id":         schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application (client) ID."},
+			"application_object_id":  schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application object ID."},
 		},
 		Blocks: map[string]schema.Block{
 			"api_permission_request": schema.SetNestedBlock{
@@ -276,7 +302,7 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 	}
 
 	if boolValue(desired.ConfigureRegistration, false) || setIsConfigured(desired.OwnerObjectIDs) {
-		update, updateErr := updateRequestFromModel(desired, result)
+		update, updateErr := updateRequestFromModel(ctx, desired, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
 			return
@@ -346,7 +372,7 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 			fmt.Sprintf("AZExecute reports status %q. Wait for automatic provisioning to finish and run Terraform again.", current.Status))
 		return
 	}
-	update, err := updateRequestFromModel(plan, current)
+	update, err := updateRequestFromModel(ctx, plan, current)
 	if err != nil {
 		response.Diagnostics.AddError("Invalid application update", err.Error())
 		return
@@ -437,7 +463,7 @@ func metadataFromModel(model applicationResourceModel) (azclient.ApplicationMeta
 	return azclient.ApplicationMetadata{BusinessJustification: model.BusinessJustification.ValueString(), TechnicalRequirements: stringPointer(model.TechnicalRequirements), IntendedAudience: stringPointer(model.IntendedAudience), DataAccessRequirements: stringPointer(model.DataAccessRequirements), ComplianceNotes: stringPointer(model.ComplianceNotes), ExpectedGoLiveDate: goLive, ProjectName: stringPointer(model.ProjectName), DepartmentOwner: stringPointer(model.DepartmentOwner), BusinessCriticality: criticality, RequiresElevatedPermissions: boolValue(model.RequiresElevatedPermissions, false), ElevatedPermissionsJustification: stringPointer(model.ElevatedPermissionsJustification), Environment: stringPointer(model.Environment), ContactEmail: stringPointer(model.ContactEmail), ContactPhone: stringPointer(model.ContactPhone)}, nil
 }
 
-func updateRequestFromModel(model applicationResourceModel, current *azclient.Application) (azclient.ApplicationUpdate, error) {
+func updateRequestFromModel(ctx context.Context, model applicationResourceModel, current *azclient.Application) (azclient.ApplicationUpdate, error) {
 	metadata, err := metadataFromModel(model)
 	if err != nil {
 		return azclient.ApplicationUpdate{}, err
@@ -462,6 +488,10 @@ func updateRequestFromModel(model applicationResourceModel, current *azclient.Ap
 		registration.Web.RedirectUris = redirectValues(model.WebRedirectURIs, registration.Web.RedirectUris)
 		registration.Spa.RedirectUris = redirectValues(model.SpaRedirectURIs, registration.Spa.RedirectUris)
 		registration.PublicClient.RedirectUris = redirectValues(model.PublicClientRedirectURIs, registration.PublicClient.RedirectUris)
+		registration.AppRoles, err = appRolesFromModel(ctx, model.AppRoles, registration.AppRoles)
+		if err != nil {
+			return update, err
+		}
 		if !model.RequestedAccessTokenVersion.IsNull() && !model.RequestedAccessTokenVersion.IsUnknown() {
 			value := model.RequestedAccessTokenVersion.ValueInt64()
 			registration.API.RequestedAccessTokenVersion = &value
@@ -513,6 +543,10 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 		target.WebEnableIDTokenIssuance = types.BoolValue(registration.Web.EnableIDTokenIssuance)
 		target.RequestedAccessTokenVersion = int64TypeFromPointer(registration.API.RequestedAccessTokenVersion)
 		var setDiagnostics diag.Diagnostics
+		if setIsConfigured(target.AppRoles) {
+			target.AppRoles, setDiagnostics = types.SetValueFrom(ctx, appRoleObjectType(), appRoleModelsFromClient(registration.AppRoles))
+			diagnostics.Append(setDiagnostics...)
+		}
 		target.IdentifierURIs, setDiagnostics = types.SetValueFrom(ctx, types.StringType, uriStrings(registration.IdentifierUris))
 		diagnostics.Append(setDiagnostics...)
 		target.WebRedirectURIs, setDiagnostics = types.SetValueFrom(ctx, types.StringType, redirectStrings(registration.Web.RedirectUris))
@@ -536,6 +570,7 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 			target.SpaRedirectURIs = types.SetNull(types.StringType)
 			target.PublicClientRedirectURIs = types.SetNull(types.StringType)
 			target.RequestedAccessTokenVersion = types.Int64Null()
+			target.AppRoles = types.SetNull(appRoleObjectType())
 		}
 	}
 }
@@ -557,7 +592,7 @@ func waitForManagedRegistration(
 
 	const maximumReadAttempts = 12
 	for attempt := 1; ; attempt++ {
-		mismatches := managedRegistrationMismatches(desired, observed)
+		mismatches := managedRegistrationMismatches(ctx, desired, observed)
 		if len(mismatches) == 0 {
 			return observed, nil
 		}
@@ -581,7 +616,7 @@ func waitForManagedRegistration(
 	}
 }
 
-func managedRegistrationMismatches(desired applicationResourceModel, observed *azclient.Application) []string {
+func managedRegistrationMismatches(ctx context.Context, desired applicationResourceModel, observed *azclient.Application) []string {
 	if observed == nil || observed.Registration == nil {
 		return []string{"registration"}
 	}
@@ -622,6 +657,9 @@ func managedRegistrationMismatches(desired applicationResourceModel, observed *a
 		(registration.API.RequestedAccessTokenVersion == nil ||
 			*registration.API.RequestedAccessTokenVersion != desired.RequestedAccessTokenVersion.ValueInt64()) {
 		mismatches = append(mismatches, "requested_access_token_version")
+	}
+	if configuredAppRolesDiffer(ctx, desired.AppRoles, registration.AppRoles) {
+		mismatches = append(mismatches, "app_roles")
 	}
 	return mismatches
 }
@@ -687,6 +725,97 @@ func stringSetPointer(value types.Set) (*[]string, error) {
 	return &result, nil
 }
 
+func appRolesFromModel(ctx context.Context, value types.Set, existing []azclient.AppRoleConfiguration) ([]azclient.AppRoleConfiguration, error) {
+	if !setIsConfigured(value) {
+		return existing, nil
+	}
+
+	var configured []appRoleModel
+	diagnostics := value.ElementsAs(ctx, &configured, false)
+	if diagnostics.HasError() {
+		return nil, fmt.Errorf("app_roles could not be read: %s", diagnostics.Errors()[0].Summary())
+	}
+
+	roles := make([]azclient.AppRoleConfiguration, 0, len(configured))
+	ids := make(map[string]struct{}, len(configured))
+	values := make(map[string]struct{}, len(configured))
+	for _, role := range configured {
+		id := role.ID.ValueString()
+		parsedID, err := uuid.Parse(id)
+		if err != nil || parsedID == uuid.Nil {
+			return nil, fmt.Errorf("app_roles id %q must be a non-empty UUID", id)
+		}
+		displayName := role.DisplayName.ValueString()
+		roleValue := role.Value.ValueString()
+		description := role.Description.ValueString()
+		if strings.TrimSpace(displayName) == "" || displayName != strings.TrimSpace(displayName) {
+			return nil, fmt.Errorf("app role %q must have a trimmed, non-empty display_name", id)
+		}
+		if strings.TrimSpace(roleValue) == "" || roleValue != strings.TrimSpace(roleValue) {
+			return nil, fmt.Errorf("app role %q must have a trimmed, non-empty value", id)
+		}
+		if strings.TrimSpace(description) == "" || description != strings.TrimSpace(description) {
+			return nil, fmt.Errorf("app role %q must have a trimmed, non-empty description", id)
+		}
+		if !role.AllowUsersAndGroups.ValueBool() && !role.AllowApplications.ValueBool() {
+			return nil, fmt.Errorf("app role %q must allow users/groups, applications, or both", id)
+		}
+		normalizedID := strings.ToLower(parsedID.String())
+		if _, duplicate := ids[normalizedID]; duplicate {
+			return nil, fmt.Errorf("app_roles contains duplicate id %q", id)
+		}
+		ids[normalizedID] = struct{}{}
+		normalizedValue := strings.ToLower(roleValue)
+		if _, duplicate := values[normalizedValue]; duplicate {
+			return nil, fmt.Errorf("app_roles contains duplicate value %q", roleValue)
+		}
+		values[normalizedValue] = struct{}{}
+		roles = append(roles, azclient.AppRoleConfiguration{
+			ID: normalizedID, DisplayName: displayName, Value: roleValue, Description: description,
+			IsEnabled: role.IsEnabled.ValueBool(), AllowUsersAndGroups: role.AllowUsersAndGroups.ValueBool(),
+			AllowApplications: role.AllowApplications.ValueBool(),
+		})
+	}
+	sort.Slice(roles, func(i, j int) bool { return roles[i].ID < roles[j].ID })
+	return roles, nil
+}
+
+func appRoleModelsFromClient(roles []azclient.AppRoleConfiguration) []appRoleModel {
+	result := make([]appRoleModel, 0, len(roles))
+	for _, role := range roles {
+		result = append(result, appRoleModel{
+			ID: types.StringValue(strings.ToLower(role.ID)), DisplayName: types.StringValue(role.DisplayName),
+			Value: types.StringValue(role.Value), Description: types.StringValue(role.Description),
+			IsEnabled: types.BoolValue(role.IsEnabled), AllowUsersAndGroups: types.BoolValue(role.AllowUsersAndGroups),
+			AllowApplications: types.BoolValue(role.AllowApplications),
+		})
+	}
+	return result
+}
+
+func configuredAppRolesDiffer(ctx context.Context, desired types.Set, observed []azclient.AppRoleConfiguration) bool {
+	if !setIsConfigured(desired) {
+		return false
+	}
+	expected, err := appRolesFromModel(ctx, desired, nil)
+	if err != nil || len(expected) != len(observed) {
+		return true
+	}
+	actual := make(map[string]azclient.AppRoleConfiguration, len(observed))
+	for _, role := range observed {
+		actual[strings.ToLower(role.ID)] = role
+	}
+	for _, role := range expected {
+		observedRole, found := actual[role.ID]
+		if !found || role.DisplayName != observedRole.DisplayName || role.Value != observedRole.Value ||
+			role.Description != observedRole.Description || role.IsEnabled != observedRole.IsEnabled ||
+			role.AllowUsersAndGroups != observedRole.AllowUsersAndGroups || role.AllowApplications != observedRole.AllowApplications {
+			return true
+		}
+	}
+	return false
+}
+
 func expectedGoLiveDateValue(existing types.String, serverValue time.Time) types.String {
 	if !existing.IsNull() && !existing.IsUnknown() {
 		value := existing.ValueString()
@@ -734,6 +863,9 @@ func normalizeUnknownRegistrationValues(target *applicationResourceModel) {
 	}
 	if target.RequestedAccessTokenVersion.IsUnknown() {
 		target.RequestedAccessTokenVersion = types.Int64Null()
+	}
+	if target.AppRoles.IsUnknown() {
+		target.AppRoles = types.SetNull(appRoleObjectType())
 	}
 }
 

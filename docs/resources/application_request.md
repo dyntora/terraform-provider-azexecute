@@ -40,6 +40,15 @@ resource "azexecute_application_request" "deployment" {
   web_redirect_uris              = ["https://platform.example.com/signin-oidc"]
   web_enable_id_token_issuance   = true
   requested_access_token_version = 2
+  app_roles = [{
+    id                     = "11111111-2222-4333-8444-555555555555"
+    display_name           = "Deployment Reader"
+    value                  = "Deployment.Reader"
+    description            = "Reads deployment status."
+    is_enabled             = true
+    allow_users_and_groups = true
+    allow_applications     = true
+  }]
 
   api_permission_request {
     target_type                      = "ExternalApi"
@@ -156,6 +165,7 @@ resource "azexecute_application_request" "example" {
       owner_object_ids,
       business_justification,
       web_redirect_uris,
+      app_roles,
       api_permission_request,
     ]
   }
@@ -196,9 +206,32 @@ the value returned by AZExecute/Entra.
 - `requested_access_token_version` (Number, Computed) — requested access-token
   version, normally `1` or `2`. Personal Microsoft account audiences require
   version `2`.
+- `app_roles` (Set of Object) — authoritative Microsoft Entra app-role
+  definitions. Omit this argument to preserve existing roles without managing
+  them. Set `[]` to remove all roles after they have been disabled.
+
+Each `app_roles` object supports:
+
+- `id` (String, Required) — stable, non-empty UUID. Never regenerate it for an
+  existing role.
+- `display_name` (String, Required) — role name shown to administrators.
+- `value` (String, Required) — unique value emitted in the `roles` token claim.
+- `description` (String, Required) — assignment and consent description.
+- `is_enabled` (Boolean, Required) — whether the role can be assigned and used.
+- `allow_users_and_groups` (Boolean, Required) — permits user and group
+  assignments.
+- `allow_applications` (Boolean, Required) — permits application/service
+  principal assignments.
+
+At least one allowed-member flag must be true. IDs and values must be unique.
+To delete an enabled role, first keep it in `app_roles` with
+`is_enabled = false` and apply. Remove the disabled role from the set in a
+second apply. Manual edits to a configured role are detected during refresh and
+restored on apply.
 
 AZExecute validates redirect URI security, audience/token-version combinations,
-identifier URIs, and registration concurrency before writing to Entra.
+identifier URIs, app roles, and registration concurrency before writing to
+Entra.
 
 ### Optional API-Permission Requests
 

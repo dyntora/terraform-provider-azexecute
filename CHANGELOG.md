@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- Adds authoritative Microsoft Entra app-role definitions through the optional
+  `app_roles` set on both application resources.
+- Detects manual app-role changes and restores configured display names, token
+  values, descriptions, enabled state, and allowed member types.
+- Preserves existing app roles when `app_roles` is omitted and supports an
+  explicit empty set after roles have first been disabled.
+
 ## 0.7.1
 
 - Fixes registration updates failing with `Provider produced inconsistent

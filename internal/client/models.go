@@ -95,20 +95,30 @@ type ApplicationOwner struct {
 }
 
 type RegistrationConfiguration struct {
-	ApplicationID          string                `json:"applicationId"`
-	ApplicationObjectID    string                `json:"applicationObjectId"`
-	DisplayName            string                `json:"displayName"`
-	SignInAudience         string                `json:"signInAudience"`
-	IsFallbackPublicClient bool                  `json:"isFallbackPublicClient"`
-	CanEdit                bool                  `json:"canEdit"`
-	ReadOnlyReason         *string               `json:"readOnlyReason,omitempty"`
-	ConcurrencyToken       string                `json:"concurrencyToken"`
-	IdentifierUris         []URIValue            `json:"identifierUris"`
-	Web                    WebConfiguration      `json:"web"`
-	Spa                    RedirectConfiguration `json:"spa"`
-	PublicClient           RedirectConfiguration `json:"publicClient"`
-	AppRoles               []any                 `json:"appRoles"`
-	API                    APIConfiguration      `json:"api"`
+	ApplicationID          string                 `json:"applicationId"`
+	ApplicationObjectID    string                 `json:"applicationObjectId"`
+	DisplayName            string                 `json:"displayName"`
+	SignInAudience         string                 `json:"signInAudience"`
+	IsFallbackPublicClient bool                   `json:"isFallbackPublicClient"`
+	CanEdit                bool                   `json:"canEdit"`
+	ReadOnlyReason         *string                `json:"readOnlyReason,omitempty"`
+	ConcurrencyToken       string                 `json:"concurrencyToken"`
+	IdentifierUris         []URIValue             `json:"identifierUris"`
+	Web                    WebConfiguration       `json:"web"`
+	Spa                    RedirectConfiguration  `json:"spa"`
+	PublicClient           RedirectConfiguration  `json:"publicClient"`
+	AppRoles               []AppRoleConfiguration `json:"appRoles"`
+	API                    APIConfiguration       `json:"api"`
+}
+
+type AppRoleConfiguration struct {
+	ID                  string `json:"id"`
+	DisplayName         string `json:"displayName"`
+	Value               string `json:"value"`
+	Description         string `json:"description"`
+	IsEnabled           bool   `json:"isEnabled"`
+	AllowUsersAndGroups bool   `json:"allowUsersAndGroups"`
+	AllowApplications   bool   `json:"allowApplications"`
 }
 
 type URIValue struct {

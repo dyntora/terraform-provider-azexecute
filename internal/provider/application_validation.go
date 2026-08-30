@@ -59,6 +59,13 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 	if boolValue(model.ConfigureRegistration, false) && !capabilities.AllowRegistrationConfiguration {
 		errors = append(errors, "configure_registration cannot be enabled because registration configuration is disabled by the tenant policy")
 	}
+	if setIsConfigured(model.AppRoles) {
+		if !boolValue(model.ConfigureRegistration, false) {
+			errors = append(errors, "app_roles requires configure_registration = true")
+		} else if _, err := appRolesFromModel(context.Background(), model.AppRoles, nil); err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
 	if !model.APIPermissionRequests.IsNull() && !model.APIPermissionRequests.IsUnknown() && len(model.APIPermissionRequests.Elements()) > 0 && !capabilities.AllowAPIPermissionRequests {
 		errors = append(errors, "api_permission_request cannot be used because API permission requests are disabled by the tenant policy")
 	}

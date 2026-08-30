@@ -53,6 +53,7 @@ type applicationRequestResourceModel struct {
 	SpaRedirectURIs                  types.Set    `tfsdk:"spa_redirect_uris"`
 	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
 	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
+	AppRoles                         types.Set    `tfsdk:"app_roles"`
 	Status                           types.String `tfsdk:"status"`
 	StatusReason                     types.String `tfsdk:"status_reason"`
 	RequestID                        types.Int64  `tfsdk:"request_id"`
@@ -127,7 +128,7 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 	// Automatic tenants can occasionally complete before POST returns. Apply registration
 	// settings immediately in that case; approval-based requests apply them on a later run.
 	if result.Status == "Ready" && (boolValue(applicationPlan.ConfigureRegistration, false) || setIsConfigured(applicationPlan.OwnerObjectIDs)) {
-		update, updateErr := updateRequestFromModel(applicationPlan, result)
+		update, updateErr := updateRequestFromModel(ctx, applicationPlan, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
 			return
@@ -200,7 +201,7 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 		return
 	}
 
-	update, err := updateRequestFromModel(plan.toApplicationModel(), current)
+	update, err := updateRequestFromModel(ctx, plan.toApplicationModel(), current)
 	if err != nil {
 		response.Diagnostics.AddError("Invalid approved application update", err.Error())
 		return
@@ -241,6 +242,7 @@ func (r *applicationRequestResource) ImportState(ctx context.Context, request re
 // original synchronous resource before approval-aware requests were available.
 func (r *applicationRequestResource) MoveState(_ context.Context) []resource.StateMover {
 	legacySourceSchema := managedApplicationSchemaV0(true)
+	versionOneSourceSchema := managedApplicationSchemaV1(true)
 	currentSourceSchema := managedApplicationSchema(true)
 	return []resource.StateMover{{
 		SourceSchema: &legacySourceSchema,
@@ -266,11 +268,30 @@ func (r *applicationRequestResource) MoveState(_ context.Context) []resource.Sta
 			response.Diagnostics.Append(response.TargetState.Set(ctx, &target)...)
 		},
 	}, {
-		SourceSchema: &currentSourceSchema,
+		SourceSchema: &versionOneSourceSchema,
 		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
 			if request.SourceTypeName != "azexecute_application" ||
 				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
 				request.SourceSchemaVersion != 1 || request.SourceState == nil {
+				return
+			}
+
+			var source applicationResourceModelV1
+			response.Diagnostics.Append(request.SourceState.Get(ctx, &source)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+
+			var target applicationRequestResourceModel
+			target.setFromApplicationModel(upgradeApplicationStateV1(source))
+			response.Diagnostics.Append(response.TargetState.Set(ctx, &target)...)
+		},
+	}, {
+		SourceSchema: &currentSourceSchema,
+		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
+			if request.SourceTypeName != "azexecute_application" ||
+				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
+				request.SourceSchemaVersion != 2 || request.SourceState == nil {
 				return
 			}
 
@@ -304,7 +325,7 @@ func (m applicationRequestResourceModel) toApplicationModel() applicationResourc
 		SignInAudience: m.SignInAudience, IsFallbackPublicClient: m.IsFallbackPublicClient, IdentifierURIs: m.IdentifierURIs,
 		WebHomePageURL: m.WebHomePageURL, WebLogoutURL: m.WebLogoutURL, WebEnableAccessTokenIssuance: m.WebEnableAccessTokenIssuance,
 		WebEnableIDTokenIssuance: m.WebEnableIDTokenIssuance, WebRedirectURIs: m.WebRedirectURIs, SpaRedirectURIs: m.SpaRedirectURIs,
-		PublicClientRedirectURIs: m.PublicClientRedirectURIs, RequestedAccessTokenVersion: m.RequestedAccessTokenVersion,
+		PublicClientRedirectURIs: m.PublicClientRedirectURIs, RequestedAccessTokenVersion: m.RequestedAccessTokenVersion, AppRoles: m.AppRoles,
 		Status: m.Status, StatusReason: m.StatusReason, RequestID: m.RequestID, ApplicationEntityID: m.ApplicationEntityID,
 		ApplicationID: m.ApplicationID, ApplicationObjectID: m.ApplicationObjectID,
 	}
@@ -322,7 +343,7 @@ func (m *applicationRequestResourceModel) setFromApplicationModel(source applica
 	m.WebHomePageURL, m.WebLogoutURL = source.WebHomePageURL, source.WebLogoutURL
 	m.WebEnableAccessTokenIssuance, m.WebEnableIDTokenIssuance = source.WebEnableAccessTokenIssuance, source.WebEnableIDTokenIssuance
 	m.WebRedirectURIs, m.SpaRedirectURIs = source.WebRedirectURIs, source.SpaRedirectURIs
-	m.PublicClientRedirectURIs, m.RequestedAccessTokenVersion = source.PublicClientRedirectURIs, source.RequestedAccessTokenVersion
+	m.PublicClientRedirectURIs, m.RequestedAccessTokenVersion, m.AppRoles = source.PublicClientRedirectURIs, source.RequestedAccessTokenVersion, source.AppRoles
 	m.Status, m.StatusReason, m.RequestID = source.Status, source.StatusReason, source.RequestID
 	m.ApplicationEntityID, m.ApplicationID, m.ApplicationObjectID = source.ApplicationEntityID, source.ApplicationID, source.ApplicationObjectID
 }

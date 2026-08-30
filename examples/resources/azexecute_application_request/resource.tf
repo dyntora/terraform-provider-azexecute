@@ -4,7 +4,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.7"
+      version = "~> 0.8"
     }
   }
 }
@@ -25,6 +25,15 @@ resource "azexecute_application_request" "deployment" {
   web_redirect_uris              = ["https://platform.example.com/signin-oidc"]
   web_enable_id_token_issuance   = true
   requested_access_token_version = 2
+  app_roles = [{
+    id                     = "11111111-2222-4333-8444-555555555555"
+    display_name           = "Deployment Reader"
+    value                  = "Deployment.Reader"
+    description            = "Reads deployment status."
+    is_enabled             = true
+    allow_users_and_groups = true
+    allow_applications     = true
+  }]
 }
 
 output "request_status" {

@@ -66,7 +66,8 @@ resource_fields=(
   is_fallback_public_client identifier_uris web_home_page_url web_logout_url
   web_enable_access_token_issuance web_enable_id_token_issuance
   web_redirect_uris spa_redirect_uris public_client_redirect_uris
-  requested_access_token_version status status_reason request_id
+  requested_access_token_version app_roles is_enabled allow_users_and_groups
+  allow_applications status status_reason request_id
   application_entity_id application_id application_object_id
   api_permission_request target_type target_application_entity_id
   target_external_api_app_id target_external_api_display_name grant_type

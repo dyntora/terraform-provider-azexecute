@@ -6,7 +6,7 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.7` supports:
+Provider `0.8` supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
@@ -16,6 +16,7 @@ Provider `0.7` supports:
 - external and internal API-permission requests;
 - account audience, identifier URIs, redirect URIs, token issuance, fallback
   public-client behavior, and requested access-token version;
+- authoritative Microsoft Entra app-role definitions with drift detection;
 - import, drift reads, state-preserving migration, and controlled deletion;
 - tenant-capability and application data sources;
 - OIDC, certificate, secret, managed-identity, developer, and static-token
@@ -54,7 +55,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.7"
+      version = "~> 0.8"
     }
   }
 }
@@ -144,7 +145,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.7.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.8.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

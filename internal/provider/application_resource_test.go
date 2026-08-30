@@ -252,10 +252,10 @@ func TestApplicationRequestMoveStateAcceptsSynchronousResource(t *testing.T) {
 		Raw:    tftypes.NewValue(targetSchema.Type().TerraformType(ctx), nil),
 		Schema: targetSchema,
 	}}
-	mover := (&applicationRequestResource{}).MoveState(ctx)[1]
+	mover := (&applicationRequestResource{}).MoveState(ctx)[2]
 	mover.StateMover(ctx, resource.MoveStateRequest{
 		SourceProviderAddress: "registry.terraform.io/dyntora/azexecute",
-		SourceSchemaVersion:   1,
+		SourceSchemaVersion:   2,
 		SourceState:           &sourceState,
 		SourceTypeName:        "azexecute_application",
 	}, &response)
@@ -284,15 +284,39 @@ func TestLegacyApplicationEntityIDUpgradeMatchesDatabaseMigration(t *testing.T) 
 	}
 }
 
+func TestVersionOneApplicationStateAdoptsUnmanagedAppRoles(t *testing.T) {
+	t.Parallel()
+	prior := applicationResourceModelV1{
+		ID:                  types.StringValue("11111111-2222-4333-8444-555555555555"),
+		DisplayName:         types.StringValue("Existing application"),
+		ApplicationEntityID: types.StringValue("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"),
+	}
+
+	upgraded := upgradeApplicationStateV1(prior)
+
+	if upgraded.ID != prior.ID || upgraded.DisplayName != prior.DisplayName || upgraded.ApplicationEntityID != prior.ApplicationEntityID {
+		t.Fatalf("version one state values were not preserved: %#v", upgraded)
+	}
+	if !upgraded.AppRoles.IsNull() {
+		t.Fatalf("existing state must adopt app roles as unmanaged, got %#v", upgraded.AppRoles)
+	}
+	if managedApplicationSchema(true).Version != 2 || managedApplicationSchemaV1(true).Version != 1 {
+		t.Fatal("application schema versions do not describe the app-role state upgrade")
+	}
+}
+
 func TestRegistrationUpdatePreservesUnmanagedFields(t *testing.T) {
 	t.Parallel()
 	version := int64(2)
 	current := &azclient.Application{Registration: &azclient.RegistrationConfiguration{
-		SignInAudience: "AzureADMyOrg", ConcurrencyToken: "etag", AppRoles: []any{map[string]any{"id": "role"}},
+		SignInAudience: "AzureADMyOrg", ConcurrencyToken: "etag", AppRoles: []azclient.AppRoleConfiguration{{
+			ID: "11111111-2222-4333-8444-555555555555", DisplayName: "Reader", Value: "Reader",
+			Description: "Reads data", IsEnabled: true, AllowApplications: true,
+		}},
 		API: azclient.APIConfiguration{RequestedAccessTokenVersion: &version, Scopes: []any{map[string]any{"id": "scope"}}},
 	}}
 	model := applicationResourceModel{BusinessJustification: types.StringValue("Needed for deployment"), ConfigureRegistration: types.BoolValue(true), SignInAudience: types.StringValue("AzureADMultipleOrgs")}
-	update, err := updateRequestFromModel(model, current)
+	update, err := updateRequestFromModel(context.Background(), model, current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,6 +325,47 @@ func TestRegistrationUpdatePreservesUnmanagedFields(t *testing.T) {
 	}
 	if len(update.Registration.AppRoles) != 1 || len(update.Registration.API.Scopes) != 1 {
 		t.Fatal("unmanaged roles or scopes were not preserved")
+	}
+}
+
+func TestRegistrationUpdateManagesAppRolesAndDetectsDrift(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	desiredRoles := appRoleSet(t, appRoleModel{
+		ID: types.StringValue("11111111-2222-4333-8444-555555555555"), DisplayName: types.StringValue("Deployment reader"),
+		Value: types.StringValue("Deployment.Reader"), Description: types.StringValue("Reads deployment status."),
+		IsEnabled: types.BoolValue(true), AllowUsersAndGroups: types.BoolValue(true), AllowApplications: types.BoolValue(true),
+	})
+	desired := applicationResourceModel{
+		BusinessJustification: types.StringValue("Integration test"), ConfigureRegistration: types.BoolValue(true),
+		AppRoles: desiredRoles,
+	}
+	current := &azclient.Application{Registration: &azclient.RegistrationConfiguration{
+		ConcurrencyToken: "etag",
+		AppRoles: []azclient.AppRoleConfiguration{{
+			ID: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", DisplayName: "Old role", Value: "Old.Role",
+			Description: "Stale role", IsEnabled: true, AllowUsersAndGroups: true,
+		}},
+	}}
+
+	update, err := updateRequestFromModel(ctx, desired, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if update.Registration == nil || update.Registration.ConcurrencyToken != "etag" || len(update.Registration.AppRoles) != 1 {
+		t.Fatalf("registration update did not preserve concurrency or set roles: %#v", update.Registration)
+	}
+	role := update.Registration.AppRoles[0]
+	if role.ID != "11111111-2222-4333-8444-555555555555" || role.Value != "Deployment.Reader" ||
+		!role.AllowUsersAndGroups || !role.AllowApplications || !role.IsEnabled {
+		t.Fatalf("unexpected managed app role: %#v", role)
+	}
+	if !containsString(managedRegistrationMismatches(ctx, desired, current), "app_roles") {
+		t.Fatal("stale app roles were not reported as registration drift")
+	}
+	confirmed := &azclient.Application{Registration: update.Registration}
+	if mismatches := managedRegistrationMismatches(ctx, desired, confirmed); len(mismatches) != 0 {
+		t.Fatalf("confirmed app roles still differ: %#v", mismatches)
 	}
 }
 
@@ -334,7 +399,7 @@ func TestManagedRegistrationMismatchesCoversTheCompleteRegistrationShape(t *test
 		API:          azclient.APIConfiguration{},
 	}}
 
-	mismatches := managedRegistrationMismatches(desired, stale)
+	mismatches := managedRegistrationMismatches(context.Background(), desired, stale)
 	for _, field := range []string{
 		"sign_in_audience", "identifier_uris", "web_home_page_url", "web_logout_url",
 		"web_enable_access_token_issuance", "web_enable_id_token_issuance", "web_redirect_uris",
@@ -397,7 +462,7 @@ func TestWaitForManagedRegistrationReloadsAStaleUpdateResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mismatches := managedRegistrationMismatches(desired, result); len(mismatches) != 0 {
+	if mismatches := managedRegistrationMismatches(context.Background(), desired, result); len(mismatches) != 0 {
 		t.Fatalf("confirmed registration still differs: %#v", mismatches)
 	}
 }
@@ -405,6 +470,15 @@ func TestWaitForManagedRegistrationReloadsAStaleUpdateResponse(t *testing.T) {
 func stringSet(t *testing.T, values ...string) types.Set {
 	t.Helper()
 	result, diagnostics := types.SetValueFrom(context.Background(), types.StringType, values)
+	if diagnostics.HasError() {
+		t.Fatal(diagnostics)
+	}
+	return result
+}
+
+func appRoleSet(t *testing.T, values ...appRoleModel) types.Set {
+	t.Helper()
+	result, diagnostics := types.SetValueFrom(context.Background(), appRoleObjectType(), values)
 	if diagnostics.HasError() {
 		t.Fatal(diagnostics)
 	}
