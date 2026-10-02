@@ -10,13 +10,15 @@ The AZExecute provider manages the deliberately limited application-registration
 surface exposed by the AZExecute Terraform API. It creates governed application
 requests, tracks approval and provisioning, updates supported metadata and
 registration settings, creates API-permission requests, and reads the tenant's
-live Terraform policy.
+live Terraform policy. It also manages application event listeners through the shared public event API, using the same ownership and task-access checks as the application UI.
 
 Terraform does not bypass AZExecute governance. The caller keeps its assigned
 AZExecute `User`, `Operator`, or `TenantAdmin` role, and every operation is
 checked against the current tenant settings.
 
 ## Choose a Resource
+
+- Use [`azexecute_event_listener`](resources/event_listener.md) to run an existing automation task when an application event occurs, including protected secret/certificate renewal mappings. Multiple listeners per application are supported.
 
 - Use `azexecute_application_request` for the normal and recommended workflow.
   It supports both approval-based and automatic tenants and never waits for a
@@ -37,7 +39,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.8"
+      version = "~> 0.9"
     }
   }
 }

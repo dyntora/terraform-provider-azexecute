@@ -112,6 +112,10 @@ func (c *Client) DeleteApplication(ctx context.Context, resourceID string) error
 }
 
 func (c *Client) do(ctx context.Context, method, path string, input, output any) error {
+	return c.doWithRetry(ctx, method, path, input, output, true)
+}
+
+func (c *Client) doWithRetry(ctx context.Context, method, path string, input, output any, allowRetry bool) error {
 	var payload []byte
 	if input != nil {
 		var err error
@@ -149,7 +153,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 
 		response, requestErr := c.httpClient.Do(req)
 		if requestErr != nil {
-			if attempt < 3 && ctx.Err() == nil {
+			if allowRetry && attempt < 3 && ctx.Err() == nil {
 				if waitErr := waitForRetry(ctx, retryDelay(attempt, "")); waitErr != nil {
 					return waitErr
 				}
@@ -158,7 +162,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 			return fmt.Errorf("call AZExecute API: %w", requestErr)
 		}
 
-		if isTransientStatus(response.StatusCode) && attempt < 3 {
+		if allowRetry && isTransientStatus(response.StatusCode) && attempt < 3 {
 			retryAfter := response.Header.Get("Retry-After")
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 			response.Body.Close()
@@ -170,9 +174,19 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			apiErr := &APIError{StatusCode: response.StatusCode}
-			limited := io.LimitReader(response.Body, 1<<20)
-			if decodeErr := json.NewDecoder(limited).Decode(apiErr); decodeErr != nil && decodeErr != io.EOF {
-				apiErr.Detail = "response was not valid problem JSON"
+			payload, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+			if readErr != nil {
+				apiErr.Detail = "unable to read error response"
+			} else if len(payload) > 0 {
+				if decodeErr := json.Unmarshal(payload, apiErr); decodeErr != nil {
+					// Shared public endpoints may return a JSON validation string instead of ProblemDetails.
+					var message string
+					if json.Unmarshal(payload, &message) == nil && len(message) <= 2000 {
+						apiErr.Detail = message
+					} else {
+						apiErr.Detail = "response was not valid problem JSON"
+					}
+				}
 			}
 			response.Body.Close()
 			return apiErr

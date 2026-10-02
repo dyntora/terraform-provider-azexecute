@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+- Adds `azexecute_event_listener` with CRUD, import, drift detection, explicit application/broad scope, automation task mappings, and TOPdesk actions.
+- Configures protected secret/certificate runtime references without retrieving credential material into Terraform state.
+- Reuses the public event API's ownership, task-access, tenant and approval rules.
+- Does not automatically retry listener creation after an ambiguous failure, avoiding duplicate event automation.
+
 ## 0.8.0
 
 - Adds authoritative Microsoft Entra app-role definitions through the optional

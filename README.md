@@ -6,7 +6,7 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.8` supports:
+Provider `0.9` supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
@@ -26,6 +26,12 @@ Terraform does not elevate the caller or bypass approval. `User` identities can
 manage only the Terraform resources they created. `Operator` and `TenantAdmin`
 identities can manage Terraform resources throughout their AZExecute tenant.
 
+Provider `0.9` also includes [`azexecute_event_listener`](docs/resources/event_listener.md):
+application-specific or explicit broad listeners, automation inputs, protected credential
+references, TOPdesk actions, import, and drift detection. It uses the public event API;
+normal callers need application ownership and task execution access, rather than being
+the creator of the application's Terraform resource.
+
 ## Documentation
 
 The complete Registry-facing documentation is maintained with the provider:
@@ -38,6 +44,7 @@ The complete Registry-facing documentation is maintained with the provider:
 - [`azexecute_application_request`](docs/resources/application_request.md)
 - [`azexecute_application`](docs/resources/application.md)
 - [`azexecute_application_owner`](docs/resources/application_owner.md)
+- [`azexecute_event_listener`](docs/resources/event_listener.md)
 - [`azexecute_capabilities`](docs/data-sources/capabilities.md)
 - [`azexecute_application` data source](docs/data-sources/application.md)
 - [Upgrade and state migration](docs/guides/migration-v0.5.md)
@@ -55,7 +62,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.8"
+      version = "~> 0.9"
     }
   }
 }
@@ -145,7 +152,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.8.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.9.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

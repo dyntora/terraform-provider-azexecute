@@ -24,6 +24,7 @@ required_files=(
   docs/resources/application.md
   docs/resources/application_request.md
   docs/resources/application_owner.md
+  docs/resources/event_listener.md
   docs/data-sources/application.md
   docs/data-sources/capabilities.md
   docs/guides/getting-started.md
@@ -38,6 +39,7 @@ required_files=(
   examples/resources/azexecute_application/resource.tf
   examples/resources/azexecute_application_request/resource.tf
   examples/resources/azexecute_application_owner/resource.tf
+  examples/resources/azexecute_event_listener/resource.tf
 )
 
 for file in "${required_files[@]}"; do
@@ -117,6 +119,11 @@ grep -Fq 'azexecute_application_request' docs/resources/application_request.md |
 grep -Fq 'NewApplicationOwnerResource' internal/provider/provider.go || fail "individual owner resource is not registered"
 for field in id application_resource_id owner_object_id; do
   grep -Fq "\`$field\`" docs/resources/application_owner.md || fail "owner resource field $field is undocumented"
+done
+
+grep -Fq 'NewEventListenerResource' internal/provider/provider.go || fail "event listener resource is not registered"
+for field in id name description event_type action_type application_entity_id broad_listener credential_type automation_task_id parameters topdesk_settings enabled execution_order authorized_by_user_id; do
+  grep -Fq "\`$field\`" docs/resources/event_listener.md || fail "event listener field $field is undocumented"
 done
 
 if grep -R -n -E 'version = "~> 0\.[0-4]|Provider `0\.[0-4]`|Provider version 0\.[0-4]|migration-v0\.[0-4]' README.md docs examples; then
