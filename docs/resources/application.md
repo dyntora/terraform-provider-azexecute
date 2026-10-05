@@ -211,6 +211,11 @@ Entra.
 
 ### Exposed Delegated Scopes and Pre-authorized Clients
 
+For examples of scopes included in the initial request, see
+[Request an API with delegated scopes](application_request.md#request-an-api-with-delegated-scopes).
+The same scope and pre-authorization arguments apply here; use
+`azexecute_application_request` when the tenant requires approval.
+
 Requires `configure_registration = true` and tenant registration configuration permission.
 
 - `exposed_scopes` (Set of Object) — authoritative scopes published by this API.

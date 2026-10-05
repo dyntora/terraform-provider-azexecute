@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- Expand application-request documentation with app roles and scopes in the same request, a complete exposed-API example, optional pre-authorized clients, and Admin/User consent examples. Clarify approval behavior and the distinction between exposing scopes and requesting downstream API permissions for OBO.
+
 ## 0.10.0
 
 - Submit complete registration configuration with application requests, for approval and server-side provisioning without a follow-up Terraform apply.

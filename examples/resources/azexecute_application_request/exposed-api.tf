@@ -8,7 +8,6 @@ resource "azexecute_application_request" "middle_tier_api" {
 
   identifier_uris                = ["api://{applicationId}"]
   requested_access_token_version = 2
-  web_redirect_uris              = ["https://api.example.com/signin-oidc"]
 
   exposed_scopes = [{
     id                         = "a1697003-ae63-49e6-9ac4-c952f139442b"
@@ -25,7 +24,8 @@ resource "azexecute_application_request" "middle_tier_api" {
   #   delegated_permission_ids = ["a1697003-ae63-49e6-9ac4-c952f139442b"]
   # }]
 
-  # Add api_permission_request blocks for downstream delegated permissions.
+  # Add api_permission_request blocks with grant_type = "DelegatedScope"
+  # for downstream delegated permissions.
   # Their approval/consent workflow is separate from publishing this API's scopes.
 }
 

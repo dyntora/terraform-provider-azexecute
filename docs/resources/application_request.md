@@ -20,6 +20,12 @@ after approval to record the generated Entra identifiers.
 
 ## Example Usage
 
+### Request app roles and delegated scopes together
+
+Both `app_roles` and `exposed_scopes` belong to the application being requested.
+Include them in the same resource to submit them together for approval.
+`api_permission_request` separately requests access to another API.
+
 ```terraform
 resource "azexecute_application_request" "deployment" {
   display_name           = "platform-deployment-production"
@@ -38,8 +44,9 @@ resource "azexecute_application_request" "deployment" {
   configure_registration         = true
   sign_in_audience               = "AzureADMyOrg"
   web_redirect_uris              = ["https://platform.example.com/signin-oidc"]
-  web_enable_id_token_issuance   = true
+  web_enable_id_token_issuance    = true
   requested_access_token_version = 2
+  identifier_uris                = ["api://{applicationId}"]
   app_roles = [{
     id                     = "11111111-2222-4333-8444-555555555555"
     display_name           = "Deployment Reader"
@@ -48,6 +55,15 @@ resource "azexecute_application_request" "deployment" {
     is_enabled             = true
     allow_users_and_groups = true
     allow_applications     = true
+  }]
+
+  exposed_scopes = [{
+    id                         = "a1697003-ae63-49e6-9ac4-c952f139442b"
+    value                      = "Deployment.Read"
+    admin_consent_display_name = "Read deployment status"
+    admin_consent_description  = "Allow this client to read deployment status on behalf of the signed-in user."
+    consent_type               = "Admin"
+    is_enabled                 = true
   }]
 
   api_permission_request {
@@ -78,6 +94,72 @@ output "application_client_id" {
 Only include metadata and operations allowed by the tenant. The provider reads
 the live Terraform policy during planning and reports missing tenant-required
 metadata before apply.
+
+### Request an API with delegated scopes
+
+This example publishes `access_as_user` under **Expose an API** on the new
+Customer API registration. It requires provider `0.10.0` or later, an API
+advertising `supports_registration_requests`, and the tenant's Terraform
+registration configuration permission. Add the metadata and owners required by
+your tenant. App roles are optional; they are not required to expose a scope.
+
+```terraform
+resource "azexecute_application_request" "middle_tier_api" {
+  display_name           = "Customer API"
+  business_justification = "Serve signed-in users and call downstream APIs on their behalf"
+  configure_registration = true
+
+  identifier_uris                = ["api://{applicationId}"]
+  requested_access_token_version = 2
+
+  exposed_scopes = [{
+    id                         = "a1697003-ae63-49e6-9ac4-c952f139442b"
+    value                      = "access_as_user"
+    admin_consent_display_name = "Access Customer API"
+    admin_consent_description  = "Allow this client to access Customer API on behalf of the signed-in user."
+    consent_type               = "Admin"
+    is_enabled                 = true
+  }]
+
+  # Optional: replace with an existing frontend application's client ID.
+  # pre_authorized_applications = [{
+  #   application_id           = "15a186bd-b911-47b7-a1dd-cd63521e9717"
+  #   delegated_permission_ids = ["a1697003-ae63-49e6-9ac4-c952f139442b"]
+  # }]
+}
+
+output "middle_tier_request_status" {
+  value = azexecute_application_request.middle_tier_api.status
+}
+```
+
+Use `exposed_scopes = [{ ... }]`, just like `app_roles`; it is a set of objects,
+not an `exposed_scopes { ... }` block. Add more objects to publish more scopes.
+Generate each scope UUID once and keep it stable in configuration. Do not use
+Terraform's `uuid()` function, which would change the identifier on later runs.
+
+The server replaces `{applicationId}` with the new API's client ID. Clients then
+request the scope `api://<customer-api-client-id>/access_as_user`. The scope's
+`id` is a permission UUID, while `value` is the scope name; neither is the API's
+client ID. In `pre_authorized_applications`, `application_id` is the calling
+frontend's client ID and `delegated_permission_ids` references the scope UUIDs
+defined in this request. Leave that argument out if pre-authorization is not
+required. A new frontend must be provisioned before its client ID can be used.
+
+With manual approval, the initial apply succeeds with `PendingApproval` and
+stores the proposed scopes for review. Approval starts provisioning; AZExecute
+creates the scopes before reporting `Ready`, without a second apply. Refresh
+Terraform afterward to update status and generated IDs. A request denied before
+provisioning remains `Rejected` with the proposal retained in state.
+
+For an on-behalf-of (OBO) application, these scopes describe how a frontend calls
+your API as a signed-in user. Use separate `api_permission_request` blocks with
+`grant_type = "DelegatedScope"` for permissions your API needs on downstream
+APIs; their approval and consent follow the separate permission workflow. This
+configures registrations; your application still implements the OBO token exchange.
+
+See [scope fields and update rules](#exposed-delegated-scopes-and-pre-authorized-clients)
+and the [approval workflow guide](../guides/approval-workflows.md).
 
 ## Lifecycle
 
@@ -237,6 +319,9 @@ Entra.
 
 Requires `configure_registration = true` and tenant registration configuration permission.
 
+See [Request an API with delegated scopes](#request-an-api-with-delegated-scopes)
+for a complete creation request, including optional pre-authorized clients.
+
 - `exposed_scopes` (Set of Object) — authoritative scopes published by this API.
   Omit to preserve existing scopes. An explicit `[]` removes disabled scopes.
 - `pre_authorized_applications` (Set of Object) — authoritative clients authorized
@@ -248,6 +333,25 @@ or `User`), and `is_enabled`. `user_consent_display_name` and
 `user_consent_description` are required for `User` and must be omitted for `Admin`.
 IDs and values must be unique. Disable a live scope and apply before removing it
 in a second apply. Remove any pre-authorization references to deleted scopes too.
+
+For a scope eligible for user consent, an entry in `exposed_scopes` looks like:
+
+```terraform
+exposed_scopes = [{
+  id                         = "da196c2b-33ab-4c29-80d1-d78638b14d1c"
+  value                      = "Profile.Read"
+  admin_consent_display_name = "Read user profiles"
+  admin_consent_description  = "Allow this client to read profiles on behalf of signed-in users."
+  user_consent_display_name  = "Read your profile"
+  user_consent_description   = "Allow this client to read your profile."
+  consent_type               = "User"
+  is_enabled                 = true
+}]
+```
+
+Tenant consent policy still applies. `consent_type` describes consent to use the
+scope; it does not control AZExecute's approval of the application request.
+For `Admin` scopes, omit both `user_consent_*` fields entirely, including empty strings.
 
 Each `pre_authorized_applications` object has required `application_id` (client
 UUID) and `delegated_permission_ids` (non-empty set of this API's scope UUIDs).

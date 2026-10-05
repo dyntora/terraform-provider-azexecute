@@ -44,6 +44,7 @@ The complete Registry-facing documentation is maintained with the provider:
 - [Azure DevOps](docs/guides/azure-devops.md)
 - [Approval and provisioning workflows](docs/guides/approval-workflows.md)
 - [`azexecute_application_request`](docs/resources/application_request.md)
+- [Request an API with delegated scopes](docs/resources/application_request.md#request-an-api-with-delegated-scopes)
 - [`azexecute_application`](docs/resources/application.md)
 - [`azexecute_application_owner`](docs/resources/application_owner.md)
 - [`azexecute_event_listener`](docs/resources/event_listener.md)
@@ -157,7 +158,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.10.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.10.1`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub
