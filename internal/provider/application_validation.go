@@ -59,6 +59,20 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 	if boolValue(model.ConfigureRegistration, false) && !capabilities.AllowRegistrationConfiguration {
 		errors = append(errors, "configure_registration cannot be enabled because registration configuration is disabled by the tenant policy")
 	}
+	if creating && boolValue(model.ConfigureRegistration, false) && !capabilities.SupportsRegistrationRequests {
+		errors = append(errors, "this API does not support registration configuration in requests; upgrade AZExecute before submitting configure_registration = true")
+	}
+	if setIsConfigured(model.ExposedScopes) || setIsConfigured(model.PreAuthorizedApplications) {
+		if !boolValue(model.ConfigureRegistration, false) {
+			errors = append(errors, "exposed_scopes and pre_authorized_applications require configure_registration = true")
+		}
+		if _, err := scopesFromModel(context.Background(), model.ExposedScopes, nil); fullyKnownSet(model.ExposedScopes) && err != nil {
+			errors = append(errors, err.Error())
+		}
+		if _, err := clientsFromModel(context.Background(), model.PreAuthorizedApplications, nil); fullyKnownSet(model.PreAuthorizedApplications) && err != nil {
+			errors = append(errors, err.Error())
+		}
+	}
 	if setIsConfigured(model.AppRoles) {
 		if !boolValue(model.ConfigureRegistration, false) {
 			errors = append(errors, "app_roles requires configure_registration = true")
@@ -170,4 +184,9 @@ func validateStringLength(name string, value types.String, minimum, maximum int)
 		return []string{fmt.Sprintf("%s must contain no more than %d characters", name, maximum)}
 	}
 	return nil
+}
+
+func fullyKnownSet(value types.Set) bool {
+	v, err := value.ToTerraformValue(context.Background())
+	return err == nil && v.IsFullyKnown()
 }

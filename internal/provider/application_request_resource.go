@@ -54,6 +54,8 @@ type applicationRequestResourceModel struct {
 	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
 	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
 	AppRoles                         types.Set    `tfsdk:"app_roles"`
+	ExposedScopes                    types.Set    `tfsdk:"exposed_scopes"`
+	PreAuthorizedApplications        types.Set    `tfsdk:"pre_authorized_applications"`
 	Status                           types.String `tfsdk:"status"`
 	StatusReason                     types.String `tfsdk:"status_reason"`
 	RequestID                        types.Int64  `tfsdk:"request_id"`
@@ -125,10 +127,24 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 		return
 	}
 
-	// Automatic tenants can occasionally complete before POST returns. Apply registration
-	// settings immediately in that case; approval-based requests apply them on a later run.
-	if result.Status == "Ready" && (boolValue(applicationPlan.ConfigureRegistration, false) || setIsConfigured(applicationPlan.OwnerObjectIDs)) {
-		update, updateErr := updateRequestFromModel(ctx, applicationPlan, result)
+	// Preserve the accepted request identity even if a later owner reconciliation fails.
+	mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
+	if response.Diagnostics.HasError() {
+		return
+	}
+	response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
+	if response.Diagnostics.HasError() {
+		return
+	}
+
+	// New API requests are fully configured by approved provisioning. Keep the legacy
+	// fallback for servers/resources that do not return a stored creation snapshot.
+	postCreatePlan := applicationPlan
+	if result.RequestedRegistration != nil {
+		postCreatePlan.ConfigureRegistration = types.BoolValue(false)
+	}
+	if result.Status == "Ready" && (boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs)) {
+		update, updateErr := updateRequestFromModel(ctx, postCreatePlan, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
 			return
@@ -243,6 +259,7 @@ func (r *applicationRequestResource) ImportState(ctx context.Context, request re
 func (r *applicationRequestResource) MoveState(_ context.Context) []resource.StateMover {
 	legacySourceSchema := managedApplicationSchemaV0(true)
 	versionOneSourceSchema := managedApplicationSchemaV1(true)
+	versionTwoSourceSchema := managedApplicationSchemaV2(true)
 	currentSourceSchema := managedApplicationSchema(true)
 	return []resource.StateMover{{
 		SourceSchema: &legacySourceSchema,
@@ -287,11 +304,29 @@ func (r *applicationRequestResource) MoveState(_ context.Context) []resource.Sta
 			response.Diagnostics.Append(response.TargetState.Set(ctx, &target)...)
 		},
 	}, {
-		SourceSchema: &currentSourceSchema,
+		SourceSchema: &versionTwoSourceSchema,
 		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
 			if request.SourceTypeName != "azexecute_application" ||
 				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
 				request.SourceSchemaVersion != 2 || request.SourceState == nil {
+				return
+			}
+
+			var source applicationResourceModelV2
+			response.Diagnostics.Append(request.SourceState.Get(ctx, &source)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+
+			var target applicationRequestResourceModel
+			target.setFromApplicationModel(upgradeApplicationResourceModelV2(source))
+			response.Diagnostics.Append(response.TargetState.Set(ctx, &target)...)
+		}}, {
+		SourceSchema: &currentSourceSchema,
+		StateMover: func(ctx context.Context, request resource.MoveStateRequest, response *resource.MoveStateResponse) {
+			if request.SourceTypeName != "azexecute_application" ||
+				!strings.HasSuffix(request.SourceProviderAddress, "/dyntora/azexecute") ||
+				request.SourceSchemaVersion != 3 || request.SourceState == nil {
 				return
 			}
 
@@ -325,7 +360,7 @@ func (m applicationRequestResourceModel) toApplicationModel() applicationResourc
 		SignInAudience: m.SignInAudience, IsFallbackPublicClient: m.IsFallbackPublicClient, IdentifierURIs: m.IdentifierURIs,
 		WebHomePageURL: m.WebHomePageURL, WebLogoutURL: m.WebLogoutURL, WebEnableAccessTokenIssuance: m.WebEnableAccessTokenIssuance,
 		WebEnableIDTokenIssuance: m.WebEnableIDTokenIssuance, WebRedirectURIs: m.WebRedirectURIs, SpaRedirectURIs: m.SpaRedirectURIs,
-		PublicClientRedirectURIs: m.PublicClientRedirectURIs, RequestedAccessTokenVersion: m.RequestedAccessTokenVersion, AppRoles: m.AppRoles,
+		PublicClientRedirectURIs: m.PublicClientRedirectURIs, RequestedAccessTokenVersion: m.RequestedAccessTokenVersion, AppRoles: m.AppRoles, ExposedScopes: m.ExposedScopes, PreAuthorizedApplications: m.PreAuthorizedApplications,
 		Status: m.Status, StatusReason: m.StatusReason, RequestID: m.RequestID, ApplicationEntityID: m.ApplicationEntityID,
 		ApplicationID: m.ApplicationID, ApplicationObjectID: m.ApplicationObjectID,
 	}
@@ -344,6 +379,7 @@ func (m *applicationRequestResourceModel) setFromApplicationModel(source applica
 	m.WebEnableAccessTokenIssuance, m.WebEnableIDTokenIssuance = source.WebEnableAccessTokenIssuance, source.WebEnableIDTokenIssuance
 	m.WebRedirectURIs, m.SpaRedirectURIs = source.WebRedirectURIs, source.SpaRedirectURIs
 	m.PublicClientRedirectURIs, m.RequestedAccessTokenVersion, m.AppRoles = source.PublicClientRedirectURIs, source.RequestedAccessTokenVersion, source.AppRoles
+	m.ExposedScopes, m.PreAuthorizedApplications = source.ExposedScopes, source.PreAuthorizedApplications
 	m.Status, m.StatusReason, m.RequestID = source.Status, source.StatusReason, source.RequestID
 	m.ApplicationEntityID, m.ApplicationID, m.ApplicationObjectID = source.ApplicationEntityID, source.ApplicationID, source.ApplicationObjectID
 }

@@ -189,7 +189,19 @@ type permissionRequestModelV0 struct {
 func (r *applicationResource) UpgradeState(_ context.Context) map[int64]resource.StateUpgrader {
 	legacySchema := managedApplicationSchemaV0(true)
 	versionOneSchema := managedApplicationSchemaV1(true)
-	return map[int64]resource.StateUpgrader{0: {
+	versionTwoSchema := managedApplicationSchemaV2(true)
+	return map[int64]resource.StateUpgrader{2: {
+		PriorSchema: &versionTwoSchema,
+		StateUpgrader: func(ctx context.Context, request resource.UpgradeStateRequest, response *resource.UpgradeStateResponse) {
+			var prior applicationResourceModelV2
+			response.Diagnostics.Append(request.State.Get(ctx, &prior)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+			upgraded := upgradeApplicationResourceModelV2(prior)
+			response.Diagnostics.Append(response.State.Set(ctx, &upgraded)...)
+		},
+	}, 0: {
 		PriorSchema: &legacySchema,
 		StateUpgrader: func(ctx context.Context, request resource.UpgradeStateRequest, response *resource.UpgradeStateResponse) {
 			var prior applicationResourceModelV0
@@ -218,7 +230,19 @@ func (r *applicationResource) UpgradeState(_ context.Context) map[int64]resource
 func (r *applicationRequestResource) UpgradeState(_ context.Context) map[int64]resource.StateUpgrader {
 	legacySchema := managedApplicationSchemaV0(false)
 	versionOneSchema := managedApplicationSchemaV1(false)
-	return map[int64]resource.StateUpgrader{0: {
+	versionTwoSchema := managedApplicationSchemaV2(false)
+	return map[int64]resource.StateUpgrader{2: {
+		PriorSchema: &versionTwoSchema,
+		StateUpgrader: func(ctx context.Context, request resource.UpgradeStateRequest, response *resource.UpgradeStateResponse) {
+			var prior applicationRequestResourceModelV2
+			response.Diagnostics.Append(request.State.Get(ctx, &prior)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+			upgraded := upgradeApplicationRequestResourceModelV2(prior)
+			response.Diagnostics.Append(response.State.Set(ctx, &upgraded)...)
+		},
+	}, 0: {
 		PriorSchema: &legacySchema,
 		StateUpgrader: func(ctx context.Context, request resource.UpgradeStateRequest, response *resource.UpgradeStateResponse) {
 			var prior applicationRequestResourceModelV0
@@ -254,6 +278,8 @@ func managedApplicationSchemaV1(includeWaitSettings bool) schema.Schema {
 	result := managedApplicationSchema(includeWaitSettings)
 	result.Version = 1
 	delete(result.Attributes, "app_roles")
+	delete(result.Attributes, "exposed_scopes")
+	delete(result.Attributes, "pre_authorized_applications")
 	return result
 }
 
@@ -271,7 +297,8 @@ func upgradeApplicationState(ctx context.Context, prior applicationResourceModel
 		WebHomePageURL: prior.WebHomePageURL, WebLogoutURL: prior.WebLogoutURL, WebEnableAccessTokenIssuance: prior.WebEnableAccessTokenIssuance,
 		WebEnableIDTokenIssuance: prior.WebEnableIDTokenIssuance, WebRedirectURIs: prior.WebRedirectURIs, SpaRedirectURIs: prior.SpaRedirectURIs,
 		PublicClientRedirectURIs: prior.PublicClientRedirectURIs, RequestedAccessTokenVersion: prior.RequestedAccessTokenVersion,
-		AppRoles:            types.SetNull(appRoleObjectType()),
+		AppRoles:      types.SetNull(appRoleObjectType()),
+		ExposedScopes: types.SetNull(scopeObjectType()), PreAuthorizedApplications: types.SetNull(clientObjectType()),
 		PollIntervalSeconds: prior.PollIntervalSeconds, CreateTimeoutMinutes: prior.CreateTimeoutMinutes, Status: prior.Status, StatusReason: prior.StatusReason,
 		RequestID: prior.RequestID, ApplicationEntityID: stringFromLegacyID(prior.ApplicationEntityID), ApplicationID: prior.ApplicationID,
 		ApplicationObjectID: prior.ApplicationObjectID,
@@ -291,6 +318,7 @@ func upgradeApplicationStateV1(prior applicationResourceModelV1) applicationReso
 		WebEnableAccessTokenIssuance: prior.WebEnableAccessTokenIssuance, WebEnableIDTokenIssuance: prior.WebEnableIDTokenIssuance,
 		WebRedirectURIs: prior.WebRedirectURIs, SpaRedirectURIs: prior.SpaRedirectURIs, PublicClientRedirectURIs: prior.PublicClientRedirectURIs,
 		RequestedAccessTokenVersion: prior.RequestedAccessTokenVersion, AppRoles: types.SetNull(appRoleObjectType()),
+		ExposedScopes: types.SetNull(scopeObjectType()), PreAuthorizedApplications: types.SetNull(clientObjectType()),
 		PollIntervalSeconds: prior.PollIntervalSeconds, CreateTimeoutMinutes: prior.CreateTimeoutMinutes, Status: prior.Status,
 		StatusReason: prior.StatusReason, RequestID: prior.RequestID, ApplicationEntityID: prior.ApplicationEntityID,
 		ApplicationID: prior.ApplicationID, ApplicationObjectID: prior.ApplicationObjectID,
@@ -388,4 +416,186 @@ func (m applicationRequestResourceModelV1) asApplicationState() applicationResou
 		RequestID: m.RequestID, ApplicationEntityID: m.ApplicationEntityID, ApplicationID: m.ApplicationID,
 		ApplicationObjectID: m.ApplicationObjectID,
 	}
+}
+
+type applicationResourceModelV2 struct {
+	ID                               types.String `tfsdk:"id"`
+	DisplayName                      types.String `tfsdk:"display_name"`
+	Description                      types.String `tfsdk:"description"`
+	BusinessJustification            types.String `tfsdk:"business_justification"`
+	TechnicalRequirements            types.String `tfsdk:"technical_requirements"`
+	IntendedAudience                 types.String `tfsdk:"intended_audience"`
+	DataAccessRequirements           types.String `tfsdk:"data_access_requirements"`
+	ComplianceNotes                  types.String `tfsdk:"compliance_notes"`
+	ExpectedGoLiveDate               types.String `tfsdk:"expected_go_live_date"`
+	ProjectName                      types.String `tfsdk:"project_name"`
+	DepartmentOwner                  types.String `tfsdk:"department_owner"`
+	BusinessCriticality              types.Int64  `tfsdk:"business_criticality"`
+	RequiresElevatedPermissions      types.Bool   `tfsdk:"requires_elevated_permissions"`
+	ElevatedPermissionsJustification types.String `tfsdk:"elevated_permissions_justification"`
+	Environment                      types.String `tfsdk:"environment"`
+	ContactEmail                     types.String `tfsdk:"contact_email"`
+	ContactPhone                     types.String `tfsdk:"contact_phone"`
+	OwnerObjectIDs                   types.Set    `tfsdk:"owner_object_ids"`
+	APIPermissionRequests            types.Set    `tfsdk:"api_permission_request"`
+	ConfigureRegistration            types.Bool   `tfsdk:"configure_registration"`
+	SignInAudience                   types.String `tfsdk:"sign_in_audience"`
+	IsFallbackPublicClient           types.Bool   `tfsdk:"is_fallback_public_client"`
+	IdentifierURIs                   types.Set    `tfsdk:"identifier_uris"`
+	WebHomePageURL                   types.String `tfsdk:"web_home_page_url"`
+	WebLogoutURL                     types.String `tfsdk:"web_logout_url"`
+	WebEnableAccessTokenIssuance     types.Bool   `tfsdk:"web_enable_access_token_issuance"`
+	WebEnableIDTokenIssuance         types.Bool   `tfsdk:"web_enable_id_token_issuance"`
+	WebRedirectURIs                  types.Set    `tfsdk:"web_redirect_uris"`
+	SpaRedirectURIs                  types.Set    `tfsdk:"spa_redirect_uris"`
+	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
+	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
+	AppRoles                         types.Set    `tfsdk:"app_roles"`
+	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
+	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
+	Status                           types.String `tfsdk:"status"`
+	StatusReason                     types.String `tfsdk:"status_reason"`
+	RequestID                        types.Int64  `tfsdk:"request_id"`
+	ApplicationEntityID              types.String `tfsdk:"application_entity_id"`
+	ApplicationID                    types.String `tfsdk:"application_id"`
+	ApplicationObjectID              types.String `tfsdk:"application_object_id"`
+}
+
+func upgradeApplicationResourceModelV2(prior applicationResourceModelV2) applicationResourceModel {
+	return applicationResourceModel{
+		ID:                               prior.ID,
+		DisplayName:                      prior.DisplayName,
+		Description:                      prior.Description,
+		BusinessJustification:            prior.BusinessJustification,
+		TechnicalRequirements:            prior.TechnicalRequirements,
+		IntendedAudience:                 prior.IntendedAudience,
+		DataAccessRequirements:           prior.DataAccessRequirements,
+		ComplianceNotes:                  prior.ComplianceNotes,
+		ExpectedGoLiveDate:               prior.ExpectedGoLiveDate,
+		ProjectName:                      prior.ProjectName,
+		DepartmentOwner:                  prior.DepartmentOwner,
+		BusinessCriticality:              prior.BusinessCriticality,
+		RequiresElevatedPermissions:      prior.RequiresElevatedPermissions,
+		ElevatedPermissionsJustification: prior.ElevatedPermissionsJustification,
+		Environment:                      prior.Environment,
+		ContactEmail:                     prior.ContactEmail,
+		ContactPhone:                     prior.ContactPhone,
+		OwnerObjectIDs:                   prior.OwnerObjectIDs,
+		APIPermissionRequests:            prior.APIPermissionRequests,
+		ConfigureRegistration:            prior.ConfigureRegistration,
+		SignInAudience:                   prior.SignInAudience,
+		IsFallbackPublicClient:           prior.IsFallbackPublicClient,
+		IdentifierURIs:                   prior.IdentifierURIs,
+		WebHomePageURL:                   prior.WebHomePageURL,
+		WebLogoutURL:                     prior.WebLogoutURL,
+		WebEnableAccessTokenIssuance:     prior.WebEnableAccessTokenIssuance,
+		WebEnableIDTokenIssuance:         prior.WebEnableIDTokenIssuance,
+		WebRedirectURIs:                  prior.WebRedirectURIs,
+		SpaRedirectURIs:                  prior.SpaRedirectURIs,
+		PublicClientRedirectURIs:         prior.PublicClientRedirectURIs,
+		RequestedAccessTokenVersion:      prior.RequestedAccessTokenVersion,
+		AppRoles:                         prior.AppRoles,
+		PollIntervalSeconds:              prior.PollIntervalSeconds,
+		CreateTimeoutMinutes:             prior.CreateTimeoutMinutes,
+		Status:                           prior.Status,
+		StatusReason:                     prior.StatusReason,
+		RequestID:                        prior.RequestID,
+		ApplicationEntityID:              prior.ApplicationEntityID,
+		ApplicationID:                    prior.ApplicationID,
+		ApplicationObjectID:              prior.ApplicationObjectID,
+		ExposedScopes:                    types.SetNull(scopeObjectType()), PreAuthorizedApplications: types.SetNull(clientObjectType()),
+	}
+}
+
+type applicationRequestResourceModelV2 struct {
+	ID                               types.String `tfsdk:"id"`
+	DisplayName                      types.String `tfsdk:"display_name"`
+	Description                      types.String `tfsdk:"description"`
+	BusinessJustification            types.String `tfsdk:"business_justification"`
+	TechnicalRequirements            types.String `tfsdk:"technical_requirements"`
+	IntendedAudience                 types.String `tfsdk:"intended_audience"`
+	DataAccessRequirements           types.String `tfsdk:"data_access_requirements"`
+	ComplianceNotes                  types.String `tfsdk:"compliance_notes"`
+	ExpectedGoLiveDate               types.String `tfsdk:"expected_go_live_date"`
+	ProjectName                      types.String `tfsdk:"project_name"`
+	DepartmentOwner                  types.String `tfsdk:"department_owner"`
+	BusinessCriticality              types.Int64  `tfsdk:"business_criticality"`
+	RequiresElevatedPermissions      types.Bool   `tfsdk:"requires_elevated_permissions"`
+	ElevatedPermissionsJustification types.String `tfsdk:"elevated_permissions_justification"`
+	Environment                      types.String `tfsdk:"environment"`
+	ContactEmail                     types.String `tfsdk:"contact_email"`
+	ContactPhone                     types.String `tfsdk:"contact_phone"`
+	OwnerObjectIDs                   types.Set    `tfsdk:"owner_object_ids"`
+	APIPermissionRequests            types.Set    `tfsdk:"api_permission_request"`
+	ConfigureRegistration            types.Bool   `tfsdk:"configure_registration"`
+	SignInAudience                   types.String `tfsdk:"sign_in_audience"`
+	IsFallbackPublicClient           types.Bool   `tfsdk:"is_fallback_public_client"`
+	IdentifierURIs                   types.Set    `tfsdk:"identifier_uris"`
+	WebHomePageURL                   types.String `tfsdk:"web_home_page_url"`
+	WebLogoutURL                     types.String `tfsdk:"web_logout_url"`
+	WebEnableAccessTokenIssuance     types.Bool   `tfsdk:"web_enable_access_token_issuance"`
+	WebEnableIDTokenIssuance         types.Bool   `tfsdk:"web_enable_id_token_issuance"`
+	WebRedirectURIs                  types.Set    `tfsdk:"web_redirect_uris"`
+	SpaRedirectURIs                  types.Set    `tfsdk:"spa_redirect_uris"`
+	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
+	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
+	AppRoles                         types.Set    `tfsdk:"app_roles"`
+	Status                           types.String `tfsdk:"status"`
+	StatusReason                     types.String `tfsdk:"status_reason"`
+	RequestID                        types.Int64  `tfsdk:"request_id"`
+	ApplicationEntityID              types.String `tfsdk:"application_entity_id"`
+	ApplicationID                    types.String `tfsdk:"application_id"`
+	ApplicationObjectID              types.String `tfsdk:"application_object_id"`
+}
+
+func upgradeApplicationRequestResourceModelV2(prior applicationRequestResourceModelV2) applicationRequestResourceModel {
+	return applicationRequestResourceModel{
+		ID:                               prior.ID,
+		DisplayName:                      prior.DisplayName,
+		Description:                      prior.Description,
+		BusinessJustification:            prior.BusinessJustification,
+		TechnicalRequirements:            prior.TechnicalRequirements,
+		IntendedAudience:                 prior.IntendedAudience,
+		DataAccessRequirements:           prior.DataAccessRequirements,
+		ComplianceNotes:                  prior.ComplianceNotes,
+		ExpectedGoLiveDate:               prior.ExpectedGoLiveDate,
+		ProjectName:                      prior.ProjectName,
+		DepartmentOwner:                  prior.DepartmentOwner,
+		BusinessCriticality:              prior.BusinessCriticality,
+		RequiresElevatedPermissions:      prior.RequiresElevatedPermissions,
+		ElevatedPermissionsJustification: prior.ElevatedPermissionsJustification,
+		Environment:                      prior.Environment,
+		ContactEmail:                     prior.ContactEmail,
+		ContactPhone:                     prior.ContactPhone,
+		OwnerObjectIDs:                   prior.OwnerObjectIDs,
+		APIPermissionRequests:            prior.APIPermissionRequests,
+		ConfigureRegistration:            prior.ConfigureRegistration,
+		SignInAudience:                   prior.SignInAudience,
+		IsFallbackPublicClient:           prior.IsFallbackPublicClient,
+		IdentifierURIs:                   prior.IdentifierURIs,
+		WebHomePageURL:                   prior.WebHomePageURL,
+		WebLogoutURL:                     prior.WebLogoutURL,
+		WebEnableAccessTokenIssuance:     prior.WebEnableAccessTokenIssuance,
+		WebEnableIDTokenIssuance:         prior.WebEnableIDTokenIssuance,
+		WebRedirectURIs:                  prior.WebRedirectURIs,
+		SpaRedirectURIs:                  prior.SpaRedirectURIs,
+		PublicClientRedirectURIs:         prior.PublicClientRedirectURIs,
+		RequestedAccessTokenVersion:      prior.RequestedAccessTokenVersion,
+		AppRoles:                         prior.AppRoles,
+		Status:                           prior.Status,
+		StatusReason:                     prior.StatusReason,
+		RequestID:                        prior.RequestID,
+		ApplicationEntityID:              prior.ApplicationEntityID,
+		ApplicationID:                    prior.ApplicationID,
+		ApplicationObjectID:              prior.ApplicationObjectID,
+		ExposedScopes:                    types.SetNull(scopeObjectType()), PreAuthorizedApplications: types.SetNull(clientObjectType()),
+	}
+}
+
+func managedApplicationSchemaV2(includeWaitSettings bool) schema.Schema {
+	result := managedApplicationSchema(includeWaitSettings)
+	result.Version = 2
+	delete(result.Attributes, "exposed_scopes")
+	delete(result.Attributes, "pre_authorized_applications")
+	return result
 }

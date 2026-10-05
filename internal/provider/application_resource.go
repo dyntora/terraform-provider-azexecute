@@ -64,6 +64,8 @@ type applicationResourceModel struct {
 	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
 	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
 	AppRoles                         types.Set    `tfsdk:"app_roles"`
+	ExposedScopes                    types.Set    `tfsdk:"exposed_scopes"`
+	PreAuthorizedApplications        types.Set    `tfsdk:"pre_authorized_applications"`
 	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
 	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
 	Status                           types.String `tfsdk:"status"`
@@ -118,7 +120,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	useInt64State := []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}
 	useSetState := []planmodifier.Set{setplanmodifier.UseStateForUnknown()}
 	result := schema.Schema{
-		Version:     2,
+		Version:     3,
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
 			"id":                                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Stable Terraform resource UUID used for API idempotency."},
@@ -151,6 +153,8 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true, PlanModifiers: useInt64State},
+			"exposed_scopes":                     exposedScopesSchema(),
+			"pre_authorized_applications":        preAuthorizedApplicationsSchema(),
 			"app_roles": schema.SetNestedAttribute{
 				Optional:    true,
 				Description: "Authoritative app-role definitions. Omit to preserve existing roles; set [] to remove all roles.",
@@ -301,8 +305,12 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 		}
 	}
 
-	if boolValue(desired.ConfigureRegistration, false) || setIsConfigured(desired.OwnerObjectIDs) {
-		update, updateErr := updateRequestFromModel(ctx, desired, result)
+	postCreatePlan := desired
+	if result.RequestedRegistration != nil {
+		postCreatePlan.ConfigureRegistration = types.BoolValue(false)
+	}
+	if boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs) {
+		update, updateErr := updateRequestFromModel(ctx, postCreatePlan, result)
 		if updateErr != nil {
 			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
 			return
@@ -441,7 +449,17 @@ func createRequestFromModel(ctx context.Context, model applicationResourceModel,
 	if err != nil {
 		return azclient.ApplicationCreate{}, err
 	}
-	return azclient.ApplicationCreate{ResourceID: resourceID, DisplayName: model.DisplayName.ValueString(), Description: stringPointer(model.Description), Metadata: metadata, OwnerObjectIDs: owners, APIPermissionRequests: permissions}, nil
+	create := azclient.ApplicationCreate{ResourceID: resourceID, DisplayName: model.DisplayName.ValueString(), Description: stringPointer(model.Description), Metadata: metadata, OwnerObjectIDs: owners, APIPermissionRequests: permissions}
+	if boolValue(model.ConfigureRegistration, false) {
+		version := int64(2)
+		initial := &azclient.Application{Registration: &azclient.RegistrationConfiguration{SignInAudience: "AzureADMyOrg", API: azclient.APIConfiguration{RequestedAccessTokenVersion: &version}}}
+		update, err := updateRequestFromModel(ctx, model, initial)
+		if err != nil {
+			return create, err
+		}
+		create.Registration = update.Registration
+	}
+	return create, nil
 }
 
 func metadataFromModel(model applicationResourceModel) (azclient.ApplicationMetadata, error) {
@@ -496,6 +514,18 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 			value := model.RequestedAccessTokenVersion.ValueInt64()
 			registration.API.RequestedAccessTokenVersion = &value
 		}
+		registration.API.Scopes, err = scopesFromModel(ctx, model.ExposedScopes, registration.API.Scopes)
+		if err != nil {
+			return update, err
+		}
+		registration.API.PreAuthorizedApplications, err = clientsFromModel(ctx, model.PreAuthorizedApplications, registration.API.PreAuthorizedApplications)
+		if err != nil {
+			return update, err
+		}
+		// Resolve creation-time placeholders only when a real client ID exists.
+		if registration.ApplicationID != "" {
+			registration.IdentifierUris = resolveIdentifierURIs(registration.IdentifierUris, registration.ApplicationID)
+		}
 		update.Registration = &registration
 	}
 	return update, nil
@@ -533,8 +563,11 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	target.ApplicationID = stringTypeFromPointer(source.ApplicationID)
 	target.ApplicationObjectID = stringTypeFromPointer(source.ApplicationObjectID)
 
-	if source.Registration != nil {
-		registration := source.Registration
+	registration := source.Registration
+	if source.Status != "Ready" && source.RequestedRegistration != nil {
+		registration = source.RequestedRegistration
+	}
+	if registration != nil {
 		target.SignInAudience = types.StringValue(registration.SignInAudience)
 		target.IsFallbackPublicClient = types.BoolValue(registration.IsFallbackPublicClient)
 		target.WebHomePageURL = stringTypeFromPointer(registration.Web.HomePageURL)
@@ -547,7 +580,12 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 			target.AppRoles, setDiagnostics = types.SetValueFrom(ctx, appRoleObjectType(), appRoleModelsFromClient(registration.AppRoles))
 			diagnostics.Append(setDiagnostics...)
 		}
-		target.IdentifierURIs, setDiagnostics = types.SetValueFrom(ctx, types.StringType, uriStrings(registration.IdentifierUris))
+		mapExposedAPIToModel(ctx, registration.API, target, diagnostics)
+		identifiers := uriStrings(registration.IdentifierUris)
+		if setIsConfigured(target.IdentifierURIs) && !configuredSetDiffers(target.IdentifierURIs, identifiersWithTemplates(target.IdentifierURIs, identifiers, registration.ApplicationID)) {
+			identifiers = identifiersWithTemplates(target.IdentifierURIs, identifiers, registration.ApplicationID)
+		}
+		target.IdentifierURIs, setDiagnostics = types.SetValueFrom(ctx, types.StringType, identifiers)
 		diagnostics.Append(setDiagnostics...)
 		target.WebRedirectURIs, setDiagnostics = types.SetValueFrom(ctx, types.StringType, redirectStrings(registration.Web.RedirectUris))
 		diagnostics.Append(setDiagnostics...)
@@ -571,6 +609,8 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 			target.PublicClientRedirectURIs = types.SetNull(types.StringType)
 			target.RequestedAccessTokenVersion = types.Int64Null()
 			target.AppRoles = types.SetNull(appRoleObjectType())
+			target.ExposedScopes = types.SetNull(scopeObjectType())
+			target.PreAuthorizedApplications = types.SetNull(clientObjectType())
 		}
 	}
 }
@@ -629,7 +669,7 @@ func managedRegistrationMismatches(ctx context.Context, desired applicationResou
 	if configuredBoolDiffers(desired.IsFallbackPublicClient, registration.IsFallbackPublicClient) {
 		mismatches = append(mismatches, "is_fallback_public_client")
 	}
-	if configuredSetDiffers(desired.IdentifierURIs, uriStrings(registration.IdentifierUris)) {
+	if configuredSetDiffers(desired.IdentifierURIs, identifiersWithTemplates(desired.IdentifierURIs, uriStrings(registration.IdentifierUris), registration.ApplicationID)) {
 		mismatches = append(mismatches, "identifier_uris")
 	}
 	if configuredOptionalStringDiffers(desired.WebHomePageURL, registration.Web.HomePageURL) {
@@ -657,6 +697,9 @@ func managedRegistrationMismatches(ctx context.Context, desired applicationResou
 		(registration.API.RequestedAccessTokenVersion == nil ||
 			*registration.API.RequestedAccessTokenVersion != desired.RequestedAccessTokenVersion.ValueInt64()) {
 		mismatches = append(mismatches, "requested_access_token_version")
+	}
+	if exposedAPIDiffers(ctx, desired, registration.API) {
+		mismatches = append(mismatches, "exposed API configuration")
 	}
 	if configuredAppRolesDiffer(ctx, desired.AppRoles, registration.AppRoles) {
 		mismatches = append(mismatches, "app_roles")

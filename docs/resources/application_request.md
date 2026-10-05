@@ -13,10 +13,10 @@ modes:
 - an approval tenant normally returns `PendingApproval`;
 - an automatic tenant returns `Provisioning` or `Ready`.
 
-Create and read perform one API operation and do not poll while holding the
-Terraform state lock. Run Terraform again after approval or background
-provisioning. When status becomes `Ready`, a later apply records the Entra
-identifiers and applies configured registration settings.
+Create submits the request after checking API capabilities; read retrieves its
+status. Neither waits for human approval. AZExecute applies requested registration
+settings during approved provisioning before reporting `Ready`. Refresh Terraform
+after approval to record the generated Entra identifiers.
 
 ## Example Usage
 
@@ -95,45 +95,45 @@ Terraform never approves a request. See the
 
 ### Required
 
-- `display_name` (String) — Microsoft Entra application display name. Must
-  contain `1`–`200` characters. Changing it replaces the request/resource.
+- `display_name` (String) â€” Microsoft Entra application display name. Must
+  contain `1`â€“`200` characters. Changing it replaces the request/resource.
 
 ### Optional Metadata
 
 All metadata fields are optional in Terraform. The tenant's live metadata
 policy can require an enabled field during plan and apply.
 
-- `description` (String) — application description, up to `500` characters.
+- `description` (String) â€” application description, up to `500` characters.
   Changing it replaces the request/resource.
-- `business_justification` (String) — business reason, `5`–`1000` characters
+- `business_justification` (String) â€” business reason, `5`â€“`1000` characters
   when supplied. Optional and computed because AZExecute can normalize an
   omitted value.
-- `technical_requirements` (String) — integrations, dependencies, or technical
+- `technical_requirements` (String) â€” integrations, dependencies, or technical
   needs, up to `500` characters.
-- `intended_audience` (String) — intended users, up to `200` characters.
-- `data_access_requirements` (String) — data access and classification, up to
+- `intended_audience` (String) â€” intended users, up to `200` characters.
+- `data_access_requirements` (String) â€” data access and classification, up to
   `500` characters.
-- `compliance_notes` (String) — compliance or regulatory context, up to `300`
+- `compliance_notes` (String) â€” compliance or regulatory context, up to `300`
   characters.
-- `expected_go_live_date` (String) — `YYYY-MM-DD` or an RFC 3339 timestamp.
-- `project_name` (String) — project, programme, or initiative, up to `100`
+- `expected_go_live_date` (String) â€” `YYYY-MM-DD` or an RFC 3339 timestamp.
+- `project_name` (String) â€” project, programme, or initiative, up to `100`
   characters.
-- `department_owner` (String) — owning department or team, up to `100`
+- `department_owner` (String) â€” owning department or team, up to `100`
   characters.
-- `business_criticality` (Number) — criticality from `1` through `5`. Defaults
+- `business_criticality` (Number) â€” criticality from `1` through `5`. Defaults
   to `3` when omitted.
-- `requires_elevated_permissions` (Boolean) — whether the application needs
+- `requires_elevated_permissions` (Boolean) â€” whether the application needs
   elevated permissions. Defaults to `false` when omitted.
-- `elevated_permissions_justification` (String) — explanation for elevated
+- `elevated_permissions_justification` (String) â€” explanation for elevated
   permissions, up to `500` characters. A tenant can require it when
   `requires_elevated_permissions` is true.
-- `environment` (String) — environment label, up to `50` characters.
-- `contact_email` (String) — valid contact email, up to `200` characters.
-- `contact_phone` (String) — contact telephone number, up to `20` characters.
+- `environment` (String) â€” environment label, up to `50` characters.
+- `contact_email` (String) â€” valid contact email, up to `200` characters.
+- `contact_phone` (String) â€” contact telephone number, up to `20` characters.
 
 ### Authoritative Owners
 
-- `owner_object_ids` (Set of String, Computed) — complete desired set of
+- `owner_object_ids` (Set of String, Computed) â€” complete desired set of
   Microsoft Entra owner object UUIDs. Apply adds missing owners and removes
   AZExecute-managed owners not present in the set from both Microsoft Entra and
   AZExecute. A refresh exposes manual owner changes made in AZExecute as
@@ -184,43 +184,43 @@ Registration arguments are used only when `configure_registration = true` and
 the tenant enables Terraform registration configuration. Omitted fields retain
 the value returned by AZExecute/Entra.
 
-- `configure_registration` (Boolean) — manages the supported registration
+- `configure_registration` (Boolean) â€” manages the supported registration
   fields. Defaults to `false`.
-- `sign_in_audience` (String, Computed) — supported Microsoft Entra audience:
+- `sign_in_audience` (String, Computed) â€” supported Microsoft Entra audience:
   `AzureADMyOrg`, `AzureADMultipleOrgs`,
   `AzureADandPersonalMicrosoftAccount`, or `PersonalMicrosoftAccount`.
-- `is_fallback_public_client` (Boolean, Computed) — enables fallback public
+- `is_fallback_public_client` (Boolean, Computed) â€” enables fallback public
   client behavior.
-- `identifier_uris` (Set of String, Computed) — application identifier URIs.
-- `web_home_page_url` (String, Computed) — web home page URL.
-- `web_logout_url` (String, Computed) — web logout URL.
-- `web_enable_access_token_issuance` (Boolean, Computed) — enables implicit-flow
+- `identifier_uris` (Set of String, Computed) â€” application identifier URIs.
+- `web_home_page_url` (String, Computed) â€” web home page URL.
+- `web_logout_url` (String, Computed) â€” web logout URL.
+- `web_enable_access_token_issuance` (Boolean, Computed) â€” enables implicit-flow
   access-token issuance.
-- `web_enable_id_token_issuance` (Boolean, Computed) — enables implicit-flow
+- `web_enable_id_token_issuance` (Boolean, Computed) â€” enables implicit-flow
   ID-token issuance.
-- `web_redirect_uris` (Set of String, Computed) — web redirect URIs.
-- `spa_redirect_uris` (Set of String, Computed) — single-page application
+- `web_redirect_uris` (Set of String, Computed) â€” web redirect URIs.
+- `spa_redirect_uris` (Set of String, Computed) â€” single-page application
   redirect URIs.
-- `public_client_redirect_uris` (Set of String, Computed) — mobile and desktop
+- `public_client_redirect_uris` (Set of String, Computed) â€” mobile and desktop
   public-client redirect URIs.
-- `requested_access_token_version` (Number, Computed) — requested access-token
+- `requested_access_token_version` (Number, Computed) â€” requested access-token
   version, normally `1` or `2`. Personal Microsoft account audiences require
   version `2`.
-- `app_roles` (Set of Object) — authoritative Microsoft Entra app-role
+- `app_roles` (Set of Object) â€” authoritative Microsoft Entra app-role
   definitions. Omit this argument to preserve existing roles without managing
   them. Set `[]` to remove all roles after they have been disabled.
 
 Each `app_roles` object supports:
 
-- `id` (String, Required) — stable, non-empty UUID. Never regenerate it for an
+- `id` (String, Required) â€” stable, non-empty UUID. Never regenerate it for an
   existing role.
-- `display_name` (String, Required) — role name shown to administrators.
-- `value` (String, Required) — unique value emitted in the `roles` token claim.
-- `description` (String, Required) — assignment and consent description.
-- `is_enabled` (Boolean, Required) — whether the role can be assigned and used.
-- `allow_users_and_groups` (Boolean, Required) — permits user and group
+- `display_name` (String, Required) â€” role name shown to administrators.
+- `value` (String, Required) â€” unique value emitted in the `roles` token claim.
+- `description` (String, Required) â€” assignment and consent description.
+- `is_enabled` (Boolean, Required) â€” whether the role can be assigned and used.
+- `allow_users_and_groups` (Boolean, Required) â€” permits user and group
   assignments.
-- `allow_applications` (Boolean, Required) — permits application/service
+- `allow_applications` (Boolean, Required) â€” permits application/service
   principal assignments.
 
 At least one allowed-member flag must be true. IDs and values must be unique.
@@ -233,33 +233,71 @@ AZExecute validates redirect URI security, audience/token-version combinations,
 identifier URIs, app roles, and registration concurrency before writing to
 Entra.
 
+### Exposed Delegated Scopes and Pre-authorized Clients
+
+Requires `configure_registration = true` and tenant registration configuration permission.
+
+- `exposed_scopes` (Set of Object) — authoritative scopes published by this API.
+  Omit to preserve existing scopes. An explicit `[]` removes disabled scopes.
+- `pre_authorized_applications` (Set of Object) — authoritative clients authorized
+  for these scopes. Omit to preserve existing clients; `[]` removes them.
+
+Each `exposed_scopes` object has required `id` (stable non-empty UUID), `value`,
+`admin_consent_display_name`, `admin_consent_description`, `consent_type` (`Admin`
+or `User`), and `is_enabled`. `user_consent_display_name` and
+`user_consent_description` are required for `User` and must be omitted for `Admin`.
+IDs and values must be unique. Disable a live scope and apply before removing it
+in a second apply. Remove any pre-authorization references to deleted scopes too.
+
+Each `pre_authorized_applications` object has required `application_id` (client
+UUID) and `delegated_permission_ids` (non-empty set of this API's scope UUIDs).
+Pre-authorization is security-relevant and is included in the request review.
+
+Registration settings are stored with the creation request and applied by the
+server after approval, before `Ready`. A rejected request remains `Rejected`
+with its requested configuration in state; it creates no application or scopes.
+Changes to an existing pending/rejected Terraform request are not applied through
+this resource: finish approval first, or explicitly replace the request after
+reviewing the destroy/create plan. A retry or refresh does not approve it.
+
+For a new API, use `identifier_uris = ["api://{applicationId}"]`; the API resolves
+this placeholder to the generated client ID during provisioning. If scopes are
+requested without identifier URIs, the API generates `api://<client-id>`.
+Use existing client IDs for pre-authorizations, or provision and approve the
+client request first before requesting an API that depends on its generated ID.
+
+New providers require `supports_registration_requests` from the API before
+submitting creation-time configuration. Older providers continue using API v1
+and their existing post-creation update behavior. Existing live applications
+retain their normal registration update behavior and concurrency checks.
+
 ### Optional API-Permission Requests
 
-- `api_permission_request` (Set of Block) — API permissions requested during
+- `api_permission_request` (Set of Block) â€” API permissions requested during
   application creation. The tenant must enable Terraform API-permission
   requests. Changing this set replaces the application request/resource.
 
 Each `api_permission_request` supports:
 
-- `target_type` (String, Required) — `ExternalApi` or `InternalApplication`.
-- `target_application_entity_id` (String) — AZExecute application entity UUID required for
+- `target_type` (String, Required) â€” `ExternalApi` or `InternalApplication`.
+- `target_application_entity_id` (String) â€” AZExecute application entity UUID required for
   `InternalApplication`.
-- `target_external_api_app_id` (String) — required for `ExternalApi`; this is
+- `target_external_api_app_id` (String) â€” required for `ExternalApi`; this is
   the target API's Microsoft Entra application/client UUID.
-- `target_external_api_display_name` (String) — optional display name for an
+- `target_external_api_display_name` (String) â€” optional display name for an
   external API, up to `255` characters.
-- `grant_type` (String, Required) — `AppRole`, `DelegatedScope`, or
+- `grant_type` (String, Required) â€” `AppRole`, `DelegatedScope`, or
   `AuthorizedClient`.
-- `justification` (String) — request justification, up to `1000` characters.
-- `permission` (Set of Block, Required) — at least one permission. Permission
+- `justification` (String) â€” request justification, up to `1000` characters.
+- `permission` (Set of Block, Required) â€” at least one permission. Permission
   IDs must be unique within the request.
 
 Each `permission` supports:
 
-- `id` (String, Required) — non-empty Microsoft Entra permission UUID.
-- `display_name` (String) — friendly permission name, up to `255` characters.
-- `value` (String) — permission value, up to `255` characters.
-- `requires_admin_consent` (Boolean) — records whether admin consent is
+- `id` (String, Required) â€” non-empty Microsoft Entra permission UUID.
+- `display_name` (String) â€” friendly permission name, up to `255` characters.
+- `value` (String) â€” permission value, up to `255` characters.
+- `requires_admin_consent` (Boolean) â€” records whether admin consent is
   required. Defaults to `false`.
 
 The same target and grant type cannot occur twice. Permission approval follows
@@ -267,16 +305,16 @@ the tenant's separate Terraform permission-flow setting.
 
 ### Read-Only
 
-- `id` (String) — stable provider-generated resource UUID used for idempotency
+- `id` (String) â€” stable provider-generated resource UUID used for idempotency
   and import.
-- `status` (String) — `PendingApproval`, `Provisioning`, `Ready`, or `Rejected`.
-- `status_reason` (String) — status or rejection explanation when supplied.
-- `request_id` (Number) — numeric AZExecute application request ID.
-- `application_entity_id` (String) — AZExecute application entity UUID;
+- `status` (String) â€” `PendingApproval`, `Provisioning`, `Ready`, or `Rejected`.
+- `status_reason` (String) â€” status or rejection explanation when supplied.
+- `request_id` (Number) â€” numeric AZExecute application request ID.
+- `application_entity_id` (String) â€” AZExecute application entity UUID;
   null until provisioning completes.
-- `application_id` (String) — Microsoft Entra application/client ID; null until
+- `application_id` (String) â€” Microsoft Entra application/client ID; null until
   provisioning completes.
-- `application_object_id` (String) — Microsoft Entra application object ID;
+- `application_object_id` (String) â€” Microsoft Entra application object ID;
   null until provisioning completes.
 
 ## Import

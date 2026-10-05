@@ -68,7 +68,10 @@ resource_fields=(
   is_fallback_public_client identifier_uris web_home_page_url web_logout_url
   web_enable_access_token_issuance web_enable_id_token_issuance
   web_redirect_uris spa_redirect_uris public_client_redirect_uris
-  requested_access_token_version app_roles is_enabled allow_users_and_groups
+  requested_access_token_version app_roles exposed_scopes pre_authorized_applications
+  admin_consent_display_name admin_consent_description consent_type
+  user_consent_display_name user_consent_description delegated_permission_ids
+  is_enabled allow_users_and_groups
   allow_applications status status_reason request_id
   application_entity_id application_id application_object_id
   api_permission_request target_type target_application_entity_id
@@ -77,7 +80,7 @@ resource_fields=(
 )
 
 capability_fields=(
-  id api_version enabled allow_application_creation allow_application_deletion
+  id api_version supports_registration_requests enabled allow_application_creation allow_application_deletion
   allow_api_permission_requests allow_registration_configuration
   use_application_request_flow use_api_permission_request_flow
   included_metadata_fields required_metadata_fields
@@ -126,7 +129,7 @@ for field in id name description event_type action_type application_entity_id br
   grep -Fq "\`$field\`" docs/resources/event_listener.md || fail "event listener field $field is undocumented"
 done
 
-if grep -R -n -E 'version = "~> 0\.[0-4]|Provider `0\.[0-4]`|Provider version 0\.[0-4]|migration-v0\.[0-4]' README.md docs examples; then
+if grep -R -n -E 'version = "~> 0\.[0-4]([."]|[[:space:]])|Provider `0\.[0-4]`|Provider version 0\.[0-4]([.]|[[:space:]]|$)|migration-v0\.[0-4]' README.md docs examples; then
   fail "stale pre-0.5 release references remain"
 fi
 

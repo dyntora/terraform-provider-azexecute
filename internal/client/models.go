@@ -3,6 +3,7 @@ package client
 import "time"
 
 type Capabilities struct {
+	SupportsRegistrationRequests   bool     `json:"supportsRegistrationRequests"`
 	APIVersion                     string   `json:"apiVersion"`
 	Enabled                        bool     `json:"enabled"`
 	AllowApplicationCreation       bool     `json:"allowApplicationCreation"`
@@ -16,12 +17,13 @@ type Capabilities struct {
 }
 
 type ApplicationCreate struct {
-	ResourceID            string                 `json:"resourceId"`
-	DisplayName           string                 `json:"displayName"`
-	Description           *string                `json:"description,omitempty"`
-	Metadata              ApplicationMetadata    `json:"metadata"`
-	OwnerObjectIDs        *[]string              `json:"ownerObjectIds,omitempty"`
-	APIPermissionRequests []APIPermissionRequest `json:"apiPermissionRequests"`
+	Registration          *RegistrationConfiguration `json:"registration,omitempty"`
+	ResourceID            string                     `json:"resourceId"`
+	DisplayName           string                     `json:"displayName"`
+	Description           *string                    `json:"description,omitempty"`
+	Metadata              ApplicationMetadata        `json:"metadata"`
+	OwnerObjectIDs        *[]string                  `json:"ownerObjectIds,omitempty"`
+	APIPermissionRequests []APIPermissionRequest     `json:"apiPermissionRequests"`
 }
 
 type ApplicationUpdate struct {
@@ -73,6 +75,7 @@ type PermissionRequestStatus struct {
 }
 
 type Application struct {
+	RequestedRegistration *RegistrationConfiguration `json:"requestedRegistration,omitempty"`
 	ResourceID            string                     `json:"resourceId"`
 	RequestID             int64                      `json:"requestId"`
 	Status                string                     `json:"status"`
@@ -138,7 +141,22 @@ type WebConfiguration struct {
 	RedirectUris              []RedirectURI `json:"redirectUris"`
 }
 type APIConfiguration struct {
-	RequestedAccessTokenVersion *int64 `json:"requestedAccessTokenVersion,omitempty"`
-	Scopes                      []any  `json:"scopes"`
-	PreAuthorizedApplications   []any  `json:"preAuthorizedApplications"`
+	RequestedAccessTokenVersion *int64                                  `json:"requestedAccessTokenVersion,omitempty"`
+	Scopes                      []PermissionScopeConfiguration          `json:"scopes"`
+	PreAuthorizedApplications   []PreAuthorizedApplicationConfiguration `json:"preAuthorizedApplications"`
+}
+
+type PermissionScopeConfiguration struct {
+	ID                      string  `json:"id"`
+	Value                   string  `json:"value"`
+	AdminConsentDisplayName string  `json:"adminConsentDisplayName"`
+	AdminConsentDescription string  `json:"adminConsentDescription"`
+	UserConsentDisplayName  *string `json:"userConsentDisplayName,omitempty"`
+	UserConsentDescription  *string `json:"userConsentDescription,omitempty"`
+	ConsentType             string  `json:"consentType"`
+	IsEnabled               bool    `json:"isEnabled"`
+}
+type PreAuthorizedApplicationConfiguration struct {
+	AppID                  string   `json:"appId"`
+	DelegatedPermissionIDs []string `json:"delegatedPermissionIds"`
 }

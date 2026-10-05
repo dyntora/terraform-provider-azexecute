@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- Submit complete registration configuration with application requests, for approval and server-side provisioning without a follow-up Terraform apply.
+- Add authoritative `exposed_scopes` and `pre_authorized_applications` to both application resources, including drift detection and safe omission.
+- Preserve existing API v1 clients; new request configuration requires `supports_registration_requests`.
+- Upgrade application state schemas from versions 0–2 to version 3 without recreating requests or adopting unmanaged scopes.
+
 ## 0.9.0
 
 - Adds `azexecute_event_listener` with CRUD, import, drift detection, explicit application/broad scope, automation task mappings, and TOPdesk actions.

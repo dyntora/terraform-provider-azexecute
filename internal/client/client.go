@@ -74,6 +74,15 @@ func (c *Client) Capabilities(ctx context.Context) (*Capabilities, error) {
 }
 
 func (c *Client) CreateApplication(ctx context.Context, request ApplicationCreate) (*Application, error) {
+	if request.Registration != nil {
+		capabilities, err := c.Capabilities(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !capabilities.SupportsRegistrationRequests {
+			return nil, fmt.Errorf("AZExecute API does not support registration configuration in requests; upgrade the API before submitting this request")
+		}
+	}
 	var result Application
 	return &result, c.do(ctx, http.MethodPost, "api/terraform/v1/applications", request, &result)
 }

@@ -6,7 +6,7 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.9` supports:
+Provider `0.10` supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
@@ -17,6 +17,8 @@ Provider `0.9` supports:
 - account audience, identifier URIs, redirect URIs, token issuance, fallback
   public-client behavior, and requested access-token version;
 - authoritative Microsoft Entra app-role definitions with drift detection;
+- exposed delegated scopes and pre-authorized clients;
+- full registration configuration included in requests and provisioned after approval;
 - import, drift reads, state-preserving migration, and controlled deletion;
 - tenant-capability and application data sources;
 - OIDC, certificate, secret, managed-identity, developer, and static-token
@@ -26,7 +28,7 @@ Terraform does not elevate the caller or bypass approval. `User` identities can
 manage only the Terraform resources they created. `Operator` and `TenantAdmin`
 identities can manage Terraform resources throughout their AZExecute tenant.
 
-Provider `0.9` also includes [`azexecute_event_listener`](docs/resources/event_listener.md):
+Provider `0.10` also includes [`azexecute_event_listener`](docs/resources/event_listener.md):
 application-specific or explicit broad listeners, automation inputs, protected credential
 references, TOPdesk actions, import, and drift detection. It uses the public event API;
 normal callers need application ownership and task execution access, rather than being
@@ -62,7 +64,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.9"
+      version = "~> 0.10"
     }
   }
 }
@@ -82,8 +84,11 @@ output "status" {
 
 The recommended `azexecute_application_request` resource works with approval
 and automatic tenants. `PendingApproval` and `Provisioning` are successful
-results: approve or wait for provisioning, then run Terraform again to refresh
-the resource and apply registration settings after it reaches `Ready`.
+results: approve or wait for provisioning, then refresh Terraform to read the
+resulting identifiers. Creation-time registration settings are stored with the
+request and applied by the API after approval, before `Ready`. This requires an
+API advertising `supports_registration_requests`; older provider clients remain
+supported by API v1.
 
 Use `azexecute_application` only when the tenant guarantees automatic
 provisioning and Terraform should wait for completion in one apply.
@@ -152,7 +157,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.9.0`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.10.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

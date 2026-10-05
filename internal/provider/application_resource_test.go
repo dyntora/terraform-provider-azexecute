@@ -252,10 +252,10 @@ func TestApplicationRequestMoveStateAcceptsSynchronousResource(t *testing.T) {
 		Raw:    tftypes.NewValue(targetSchema.Type().TerraformType(ctx), nil),
 		Schema: targetSchema,
 	}}
-	mover := (&applicationRequestResource{}).MoveState(ctx)[2]
+	mover := (&applicationRequestResource{}).MoveState(ctx)[3]
 	mover.StateMover(ctx, resource.MoveStateRequest{
 		SourceProviderAddress: "registry.terraform.io/dyntora/azexecute",
-		SourceSchemaVersion:   2,
+		SourceSchemaVersion:   3,
 		SourceState:           &sourceState,
 		SourceTypeName:        "azexecute_application",
 	}, &response)
@@ -300,7 +300,7 @@ func TestVersionOneApplicationStateAdoptsUnmanagedAppRoles(t *testing.T) {
 	if !upgraded.AppRoles.IsNull() {
 		t.Fatalf("existing state must adopt app roles as unmanaged, got %#v", upgraded.AppRoles)
 	}
-	if managedApplicationSchema(true).Version != 2 || managedApplicationSchemaV1(true).Version != 1 {
+	if managedApplicationSchema(true).Version != 3 || managedApplicationSchemaV1(true).Version != 1 {
 		t.Fatal("application schema versions do not describe the app-role state upgrade")
 	}
 }
@@ -313,7 +313,7 @@ func TestRegistrationUpdatePreservesUnmanagedFields(t *testing.T) {
 			ID: "11111111-2222-4333-8444-555555555555", DisplayName: "Reader", Value: "Reader",
 			Description: "Reads data", IsEnabled: true, AllowApplications: true,
 		}},
-		API: azclient.APIConfiguration{RequestedAccessTokenVersion: &version, Scopes: []any{map[string]any{"id": "scope"}}},
+		API: azclient.APIConfiguration{RequestedAccessTokenVersion: &version, Scopes: []azclient.PermissionScopeConfiguration{{ID: "scope"}}},
 	}}
 	model := applicationResourceModel{BusinessJustification: types.StringValue("Needed for deployment"), ConfigureRegistration: types.BoolValue(true), SignInAudience: types.StringValue("AzureADMultipleOrgs")}
 	update, err := updateRequestFromModel(context.Background(), model, current)

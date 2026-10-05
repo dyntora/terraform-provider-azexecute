@@ -73,15 +73,21 @@ uses its approval flow.
 
 ## Registration Configuration
 
-Registration fields can be sent only after the application exists. Set
-`configure_registration = true` and enable registration configuration in the
-tenant settings. With the asynchronous resource:
+Set `configure_registration = true` and enable registration configuration in the
+tenant settings. The provider sends the full configuration with the creation
+request, including redirect URIs, app roles, exposed scopes and pre-authorized
+clients. Reviewers see that snapshot. AZExecute applies it after approval and
+before reporting `Ready`; no second Terraform apply is needed for provisioning.
 
-- if create returns `Ready`, configuration is applied immediately;
-- otherwise, a later Terraform run applies it after status becomes `Ready`.
+Pending and rejected requests retain their requested configuration. Rejection
+creates no registration. A later Terraform refresh reads status and configuration
+without approving the request. Changes to an existing request still require it
+to be ready, or an explicit replacement with a reviewed destroy/create plan.
 
-AZExecute uses a concurrency token to avoid overwriting an unrelated concurrent
-registration change.
+The new request behavior requires the API's `supports_registration_requests`
+capability. Old providers remain compatible with API v1 and continue to configure
+registrations after creation. Existing live updates use concurrency tokens and
+preserve omitted scopes and clients.
 
 ## Destroy Behavior
 
