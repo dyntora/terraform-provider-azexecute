@@ -14,6 +14,7 @@ var _ datasource.DataSourceWithConfigure = &capabilitiesDataSource{}
 
 type capabilitiesDataSource struct{ client *azclient.Client }
 type capabilitiesDataSourceModel struct {
+	MinimumAdditionalOwners        types.Int64  `tfsdk:"minimum_additional_owners"`
 	SupportsRegistrationRequests   types.Bool   `tfsdk:"supports_registration_requests"`
 	ID                             types.String `tfsdk:"id"`
 	APIVersion                     types.String `tfsdk:"api_version"`
@@ -34,6 +35,7 @@ func (d *capabilitiesDataSource) Metadata(_ context.Context, request datasource.
 }
 func (d *capabilitiesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, response *datasource.SchemaResponse) {
 	response.Schema = schema.Schema{Description: "Reads the tenant policy enforced by the AZExecute Terraform API.", Attributes: map[string]schema.Attribute{
+		"minimum_additional_owners":      schema.Int64Attribute{Computed: true, Description: "Minimum additional Entra user owners, excluding the original requester. Service principals do not count."},
 		"supports_registration_requests": schema.BoolAttribute{Computed: true},
 		"id":                             schema.StringAttribute{Computed: true}, "api_version": schema.StringAttribute{Computed: true}, "enabled": schema.BoolAttribute{Computed: true},
 		"allow_application_creation": schema.BoolAttribute{Computed: true}, "allow_application_deletion": schema.BoolAttribute{Computed: true},
@@ -62,6 +64,6 @@ func (d *capabilitiesDataSource) Read(ctx context.Context, _ datasource.ReadRequ
 	if response.Diagnostics.HasError() {
 		return
 	}
-	state := capabilitiesDataSourceModel{SupportsRegistrationRequests: types.BoolValue(result.SupportsRegistrationRequests), ID: types.StringValue("tenant"), APIVersion: types.StringValue(result.APIVersion), Enabled: types.BoolValue(result.Enabled), AllowApplicationCreation: types.BoolValue(result.AllowApplicationCreation), AllowApplicationDeletion: types.BoolValue(result.AllowApplicationDeletion), AllowAPIPermissionRequests: types.BoolValue(result.AllowAPIPermissionRequests), AllowRegistrationConfiguration: types.BoolValue(result.AllowRegistrationConfiguration), UseApplicationRequestFlow: types.BoolValue(result.UseApplicationRequestFlow), UseAPIPermissionRequestFlow: types.BoolValue(result.UseAPIPermissionRequestFlow), IncludedMetadataFields: included, RequiredMetadataFields: required}
+	state := capabilitiesDataSourceModel{MinimumAdditionalOwners: types.Int64Value(result.MinimumAdditionalOwners), SupportsRegistrationRequests: types.BoolValue(result.SupportsRegistrationRequests), ID: types.StringValue("tenant"), APIVersion: types.StringValue(result.APIVersion), Enabled: types.BoolValue(result.Enabled), AllowApplicationCreation: types.BoolValue(result.AllowApplicationCreation), AllowApplicationDeletion: types.BoolValue(result.AllowApplicationDeletion), AllowAPIPermissionRequests: types.BoolValue(result.AllowAPIPermissionRequests), AllowRegistrationConfiguration: types.BoolValue(result.AllowRegistrationConfiguration), UseApplicationRequestFlow: types.BoolValue(result.UseApplicationRequestFlow), UseAPIPermissionRequestFlow: types.BoolValue(result.UseAPIPermissionRequestFlow), IncludedMetadataFields: included, RequiredMetadataFields: required}
 	response.Diagnostics.Append(response.State.Set(ctx, &state)...)
 }

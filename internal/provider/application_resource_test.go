@@ -10,6 +10,7 @@ import (
 	"time"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -82,6 +83,79 @@ func TestValidateApplicationPlanUsesTenantMetadataRequirements(t *testing.T) {
 	errors := validateApplicationPlan(model, capabilities, true)
 	if len(errors) != 1 || !strings.Contains(errors[0], "project_name") {
 		t.Fatalf("expected a project_name tenant-policy error, got %#v", errors)
+	}
+}
+
+func TestPlanEnforcesMinimumAdditionalOwners(t *testing.T) {
+	capabilities := &azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, MinimumAdditionalOwners: 2}
+	for _, test := range []struct {
+		name                string
+		owners              types.Set
+		creating, wantError bool
+	}{
+		{"omitted create", types.SetNull(types.StringType), true, true},
+		{"empty create", types.SetValueMust(types.StringType, []attr.Value{}), true, true},
+		{"too few", stringSet(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), true, true},
+		{"case duplicates", stringSet(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"), true, true},
+		{"enough", stringSet(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "11111111-2222-3333-4444-555555555555"), true, false},
+		{"unknown", types.SetUnknown(types.StringType), true, false},
+		{"unknown element", types.SetValueMust(types.StringType, []attr.Value{types.StringUnknown()}), true, false},
+		{"unmanaged update", types.SetNull(types.StringType), false, false},
+		{"empty update", types.SetValueMust(types.StringType, []attr.Value{}), false, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			model := applicationResourceModel{DisplayName: types.StringValue("API"), OwnerObjectIDs: test.owners}
+			errors := validateApplicationPlan(model, capabilities, test.creating)
+			if (len(errors) > 0) != test.wantError {
+				t.Fatalf("unexpected validation: %v", errors)
+			}
+			if test.wantError && !strings.Contains(strings.Join(errors, " "), "at least 2 additional Entra user owners") {
+				t.Fatalf("missing policy guidance: %v", errors)
+			}
+		})
+	}
+}
+
+func TestModifyPlanDistinguishesOmittedOwnersFromUnknownReferences(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, MinimumAdditionalOwners: 1})
+	}))
+	defer server.Close()
+	api, _ := azclient.New(server.URL, "scope", "token", nil, time.Second)
+	for _, synchronous := range []bool{false, true} {
+		for _, unknown := range []bool{false, true} {
+			ctx := context.Background()
+			schema := managedApplicationSchema(synchronous)
+			configuration := tfsdk.Plan{Raw: tftypes.NewValue(schema.Type().TerraformType(ctx), nil), Schema: schema}
+			if d := configuration.SetAttribute(ctx, path.Root("display_name"), types.StringValue("API")); d.HasError() {
+				t.Fatal(d)
+			}
+			owners := types.SetNull(types.StringType)
+			if unknown {
+				owners = types.SetUnknown(types.StringType)
+			}
+			if d := configuration.SetAttribute(ctx, path.Root("owner_object_ids"), owners); d.HasError() {
+				t.Fatal(d)
+			}
+			plan := configuration
+			if d := plan.SetAttribute(ctx, path.Root("owner_object_ids"), types.SetUnknown(types.StringType)); d.HasError() {
+				t.Fatal(d)
+			}
+			request := resource.ModifyPlanRequest{Plan: plan, Config: tfsdk.Config{Raw: configuration.Raw, Schema: schema},
+				State: tfsdk.State{Raw: tftypes.NewValue(schema.Type().TerraformType(ctx), nil), Schema: schema}}
+			response := resource.ModifyPlanResponse{}
+			if synchronous {
+				(&applicationResource{client: api}).ModifyPlan(ctx, request, &response)
+			} else {
+				(&applicationRequestResource{client: api}).ModifyPlan(ctx, request, &response)
+			}
+			if response.Diagnostics.HasError() == unknown {
+				t.Fatalf("synchronous=%v unknown=%v: %v", synchronous, unknown, response.Diagnostics)
+			}
+			if !unknown && !strings.Contains(response.Diagnostics.Errors()[0].Detail(), "owner_object_ids") {
+				t.Fatal(response.Diagnostics)
+			}
+		}
 	}
 }
 

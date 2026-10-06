@@ -34,6 +34,8 @@ This data source has no arguments.
 
 ### Read-Only
 
+- `minimum_additional_owners` (Number) — minimum distinct Entra user owners in addition to the original requester. Service principals do not count. The API enforces this on creation, updates and owner removal.
+
 - `id` (String) â€” stable data-source ID; currently `tenant`.
 - `api_version` (String) â€” AZExecute Terraform API contract version.
 - `enabled` (Boolean) â€” whether the dedicated Terraform API is enabled.

@@ -219,7 +219,7 @@ policy can require an enabled field during plan and apply.
   Microsoft Entra owner object UUIDs. Apply adds missing owners and removes
   AZExecute-managed owners not present in the set from both Microsoft Entra and
   AZExecute. A refresh exposes manual owner changes made in AZExecute as
-  Terraform drift. Set `[]` to remove every customer-managed owner; omit the
+  Terraform drift. Set `[]` to remove every customer-managed owner only when the tenant minimum permits it; omit the
   argument to adopt current ownership. Graph-only operational identities used
   by AZExecute are preserved so later app-only updates continue to work.
 

@@ -3,6 +3,7 @@ package client
 import "time"
 
 type Capabilities struct {
+	MinimumAdditionalOwners        int64    `json:"minimumAdditionalOwners"`
 	SupportsRegistrationRequests   bool     `json:"supportsRegistrationRequests"`
 	APIVersion                     string   `json:"apiVersion"`
 	Enabled                        bool     `json:"enabled"`

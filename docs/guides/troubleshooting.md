@@ -7,6 +7,26 @@ description: |-
 
 # Troubleshooting
 
+## Minimum Additional Owners
+
+The tenant's minimum additional-owner setting applies to Terraform, including
+requests from service principals. Set `owner_object_ids` to distinct Entra user
+object IDs. The original requester, service principals and deleted users do not
+satisfy this minimum. Read `minimum_additional_owners` from
+`data.azexecute_capabilities.current` to see the current requirement.
+
+Required owners must be supplied on `azexecute_application_request` or
+`azexecute_application` when creating it. Separate `azexecute_application_owner`
+resources run after creation and cannot satisfy this validation. Planning catches
+an insufficient known set; the API checks identities and current tenant policy
+again during apply. Unknown IDs are deferred until apply.
+
+Updates with unmanaged owners still check the existing owner set. Removing an
+owner or replacing the set cannot leave fewer additional user owners than the
+tenant requires. Add replacement owners before removing existing ones. Existing
+applications below the minimum are not automatically changed by this release;
+add the missing user owners before applying further updates.
+
 ## 400 Validation Failed
 
 Validation diagnostics list the fields to correct, for example:

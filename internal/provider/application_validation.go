@@ -9,6 +9,7 @@ import (
 	"time"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -32,6 +33,14 @@ func (r *applicationResource) ModifyPlan(ctx context.Context, request resource.M
 		return
 	}
 
+	if capabilities.MinimumAdditionalOwners > 0 {
+		// Optional+computed owners become unknown in the plan when omitted.
+		// Read configuration to distinguish omission from a deferred reference.
+		response.Diagnostics.Append(request.Config.GetAttribute(ctx, path.Root("owner_object_ids"), &plan.OwnerObjectIDs)...)
+		if response.Diagnostics.HasError() {
+			return
+		}
+	}
 	errors := validateSynchronousApplicationPlan(plan, capabilities, request.State.Raw.IsNull())
 	if len(errors) > 0 {
 		response.Diagnostics.AddError(
@@ -155,7 +164,18 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 	if value := modelIntOr(model.CreateTimeoutMinutes, 60); value < 1 || value > 1440 {
 		errors = append(errors, "create_timeout_minutes must be between 1 and 1440")
 	}
-	if setIsConfigured(model.OwnerObjectIDs) {
+	if capabilities.MinimumAdditionalOwners > 0 && !model.OwnerObjectIDs.IsUnknown() && (creating || !model.OwnerObjectIDs.IsNull()) && fullyKnownSet(model.OwnerObjectIDs) {
+		owners := make(map[string]struct{})
+		for _, element := range model.OwnerObjectIDs.Elements() {
+			if value, ok := element.(types.String); ok && !value.IsNull() {
+				owners[strings.ToLower(value.ValueString())] = struct{}{}
+			}
+		}
+		if int64(len(owners)) < capabilities.MinimumAdditionalOwners {
+			errors = append(errors, fmt.Sprintf("owner_object_ids must contain at least %d additional Entra user owners required by tenant policy. The requester and service principals do not count; the API verifies owner identities during apply. Supply owners here when creating the request, rather than adding them later with azexecute_application_owner resources.", capabilities.MinimumAdditionalOwners))
+		}
+	}
+	if setIsConfigured(model.OwnerObjectIDs) && fullyKnownSet(model.OwnerObjectIDs) {
 		for _, element := range model.OwnerObjectIDs.Elements() {
 			value, ok := element.(types.String)
 			if !ok || value.IsNull() || value.IsUnknown() || !uuidPattern.MatchString(value.ValueString()) {

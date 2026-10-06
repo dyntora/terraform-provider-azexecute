@@ -38,6 +38,11 @@ resource "azexecute_application_owner" "example" {
 
 ## Ownership Modes
 
+If the tenant requires additional owners, supply them inline when creating the
+application request. Individual owner resources run after creation and cannot
+satisfy that initial validation. Individual mode can manage an existing compliant
+application; owner removal is rejected if it would break the tenant minimum.
+
 Choose exactly one ownership mode for an application:
 
 - Inline authoritative mode: set `owner_object_ids` on

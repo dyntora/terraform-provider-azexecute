@@ -96,6 +96,12 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 		return
 	}
 
+	if capabilities.MinimumAdditionalOwners > 0 {
+		response.Diagnostics.Append(request.Config.GetAttribute(ctx, path.Root("owner_object_ids"), &plan.OwnerObjectIDs)...)
+		if response.Diagnostics.HasError() {
+			return
+		}
+	}
 	errors := validateApplicationPlan(plan.toApplicationModel(), capabilities, request.State.Raw.IsNull())
 	if len(errors) > 0 {
 		response.Diagnostics.AddError("Invalid application request configuration for this AZExecute tenant", strings.Join(errors, "\n"))

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1
+
+- Expose `minimum_additional_owners` in tenant capabilities and validate known owner sets during planning. Unknown owner IDs remain deferred to apply.
+- Matching API changes enforce the tenant's additional-owner minimum before creation, updates and owner removal. The original requester, service principals and deleted users do not satisfy the requirement; failures identify `owner_object_ids` and explain how to fix the request.
+
 ## 0.11.0
 
 - Show every API validation error with its Terraform field name, nested item index, error code and one correlation reference across application, owner and event-listener operations.
