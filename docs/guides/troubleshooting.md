@@ -7,6 +7,33 @@ description: |-
 
 # Troubleshooting
 
+## 400 Validation Failed
+
+Validation diagnostics list the fields to correct, for example:
+
+```text
+AZExecute API returned HTTP 400: Terraform configuration validation failed
+- project_name: Project Name is required by tenant metadata settings.
+- app_roles[1].value: Choose a unique role value.
+Error code: terraform_validation_failed (trace request-reference)
+```
+
+Correct each listed value and run `terraform plan` again. Nested indexes identify
+items in the API request; Terraform sets do not have a stable configuration order,
+so also use the role, scope or permission named in the message to locate the item.
+The HTTP API retains full paths such as `metadata.projectName`; the provider
+translates these into Terraform attribute names.
+
+Deploy both the API and provider fixes to receive the complete diagnostics. Older
+providers ignore the API's `errors` object. Older providers can also send unused
+registration collections as `null`, causing required-field errors even when no
+redirect URI or pre-authorized client was configured. The updated provider sends
+empty arrays for those collections.
+
+If no field details are returned, give the reference to an administrator. They
+can find the original exception and API failure event using the same `TraceId` in
+server logs. A generic summary alone does not establish which field was invalid.
+
 ## A Metadata Field Is Reported as Required
 
 Only `display_name` is statically required. Other metadata requirements come
@@ -33,7 +60,7 @@ terraform providers
 terraform init -upgrade
 ```
 
-Verify the configuration requires `dyntora/azexecute` `~> 0.10` and inspect
+Verify the configuration requires `dyntora/azexecute` `~> 0.11` and inspect
 `.terraform.lock.hcl`. CI/CD caches and mirrors must also contain the selected
 release. Provider `0.5.0` is the first release containing the complete Registry
 reference and the approval-aware resource documentation in the same tag.

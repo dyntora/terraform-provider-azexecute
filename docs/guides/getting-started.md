@@ -49,7 +49,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.10"
+      version = "~> 0.11"
     }
   }
 }

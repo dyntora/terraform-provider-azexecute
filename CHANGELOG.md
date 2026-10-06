@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- Show every API validation error with its Terraform field name, nested item index, error code and one correlation reference across application, owner and event-listener operations.
+- Send empty registration and permission-request collections as arrays instead of null, avoiding ASP.NET model-validation failures for omitted optional configuration.
+- Matching API changes preserve nested validation paths, return all metadata and permission-block issues, and distinguish input errors from dependency timeouts and unexpected server failures.
+
 ## 0.10.1
 
 - Expand application-request documentation with app roles and scopes in the same request, a complete exposed-API example, optional pre-authorized clients, and Admin/User consent examples. Clarify approval behavior and the distinction between exposing scopes and requesting downstream API permissions for OBO.

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,9 +27,11 @@ type Client struct {
 
 type APIError struct {
 	StatusCode int
-	Title      string `json:"title"`
-	Detail     string `json:"detail"`
-	TraceID    string `json:"traceId"`
+	Title      string              `json:"title"`
+	Detail     string              `json:"detail"`
+	TraceID    string              `json:"traceId"`
+	Code       string              `json:"code"`
+	Errors     map[string][]string `json:"errors"`
 }
 
 func (e *APIError) Error() string {
@@ -37,9 +40,27 @@ func (e *APIError) Error() string {
 		message = e.Title
 	}
 	if message == "" {
-		message = http.StatusText(e.StatusCode)
+		message = defaultErrorDetail(e.StatusCode)
 	}
-	if e.TraceID != "" {
+	fields := make([]string, 0, len(e.Errors))
+	for field := range e.Errors {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	for _, field := range fields {
+		seen := make(map[string]bool)
+		for _, detail := range e.Errors[field] {
+			detail = strings.TrimSpace(detail)
+			if detail != "" && !seen[detail] {
+				message += "\n- " + terraformFieldName(field) + ": " + detail
+				seen[detail] = true
+			}
+		}
+	}
+	if e.Code != "" && e.Code != e.Title && !strings.Contains(message, e.Code) {
+		message += "\nError code: " + e.Code
+	}
+	if e.TraceID != "" && !strings.Contains(message, e.TraceID) {
 		message += " (trace " + e.TraceID + ")"
 	}
 	return fmt.Sprintf("AZExecute API returned HTTP %d: %s", e.StatusCode, message)
@@ -198,6 +219,9 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, input, ou
 				}
 			}
 			response.Body.Close()
+			if apiErr.TraceID == "" {
+				apiErr.TraceID = response.Header.Get("X-Correlation-ID")
+			}
 			return apiErr
 		}
 		if output == nil || response.StatusCode == http.StatusNoContent {

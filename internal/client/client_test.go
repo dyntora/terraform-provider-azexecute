@@ -109,6 +109,98 @@ func TestProblemDetailsAreReturnedAsTypedError(t *testing.T) {
 	}
 }
 
+func TestValidationErrorsPreserveAllFieldsAndOneReference(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"title":"Validation failed","detail":"Review the configuration. Reference: abc.","traceId":"abc","code":"terraform_validation_failed","errors":{"registration.appRoles[1].value":["Choose a unique role value."],"metadata.projectName":["Project Name is required.","Project Name is required."],"registration.appRoles[0].value":["Supply a role value."]}}`))
+	}))
+	defer server.Close()
+	api, _ := New(server.URL, "ignored", "token", nil, time.Second)
+	_, err := api.CreateApplication(context.Background(), ApplicationCreate{})
+	if err == nil {
+		t.Fatal("expected validation failure")
+	}
+	message := err.Error()
+	for _, expected := range []string{"project_name: Project Name is required.", "app_roles[0].value: Supply a role value.", "app_roles[1].value: Choose a unique role value.", "terraform_validation_failed"} {
+		if !strings.Contains(message, expected) {
+			t.Errorf("missing %q in %s", expected, message)
+		}
+	}
+	if strings.Count(message, "abc") != 1 || strings.Count(message, "Project Name is required.") != 1 {
+		t.Fatalf("duplicate diagnostic: %s", message)
+	}
+	if strings.Index(message, "project_name") > strings.Index(message, "app_roles[0]") {
+		t.Fatalf("unstable field order: %s", message)
+	}
+}
+
+func TestErrorResponseShapesAndCorrelationFallback(t *testing.T) {
+	for _, body := range []string{`{"errors":{"metadata.contactEmail":["Supply a valid email address."]}}`, `"Supply a valid email address."`, `<html>private proxy diagnostics</html>`, ""} {
+		t.Run(body, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("X-Correlation-ID", "header-trace")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			api, _ := New(server.URL, "ignored", "token", nil, time.Second)
+			_, err := api.Capabilities(context.Background())
+			if err == nil || !strings.Contains(err.Error(), "header-trace") {
+				t.Fatalf("missing correlation: %v", err)
+			}
+			if strings.Contains(body, "valid email") && !strings.Contains(err.Error(), "Supply a valid email address.") {
+				t.Fatalf("lost guidance: %v", err)
+			}
+			if strings.Contains(err.Error(), "private proxy") {
+				t.Fatalf("exposed raw response: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplicationRequestSerializesEmptyCollectionsAsArrays(t *testing.T) {
+	payload, err := json.Marshal(ApplicationCreate{Registration: &RegistrationConfiguration{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual map[string]any
+	if err := json.Unmarshal(payload, &actual); err != nil {
+		t.Fatal(err)
+	}
+	registration := actual["registration"].(map[string]any)
+	collections := []any{actual["apiPermissionRequests"], registration["identifierUris"], registration["appRoles"]}
+	for _, platform := range []string{"web", "spa", "publicClient"} {
+		collections = append(collections, registration[platform].(map[string]any)["redirectUris"])
+	}
+	api := registration["api"].(map[string]any)
+	collections = append(collections, api["scopes"], api["preAuthorizedApplications"])
+	for _, collection := range collections {
+		if values, ok := collection.([]any); !ok || len(values) != 0 {
+			t.Fatalf("expected empty array, got %#v; JSON: %s", collection, payload)
+		}
+	}
+	if _, exists := actual["ownerObjectIds"]; exists {
+		t.Fatal("unmanaged ownership must remain omitted")
+	}
+}
+
+func TestValidationFieldNamesMatchTerraformAttributes(t *testing.T) {
+	for field, expected := range map[string]string{
+		"$.Metadata.ContactEmail":                             "contact_email",
+		"Registration.Api.Scopes[0].AdminConsentDisplayName":  "exposed_scopes[0].admin_consent_display_name",
+		"registration.api.preAuthorizedApplications[1].appId": "pre_authorized_applications[1].app_id",
+		"registration.web.redirectUris[0]":                    "web_redirect_uris[0]",
+		"registration.spa.redirectUris[0]":                    "spa_redirect_uris[0]",
+		"registration.publicClient.redirectUris[0]":           "public_client_redirect_uris[0]",
+		"apiPermissionRequests[0].targetExternalApiAppId":     "api_permission_request[0].target_external_api_app_id",
+		"OwnerObjectIds": "owner_object_ids",
+	} {
+		if actual := terraformFieldName(field); actual != expected {
+			t.Errorf("%s: got %s, want %s", field, actual, expected)
+		}
+	}
+}
+
 func TestRejectsInsecureRemoteEndpoint(t *testing.T) {
 	t.Parallel()
 	if _, err := New("http://example.com", "scope", "token", nil, time.Second); err == nil {

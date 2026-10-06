@@ -65,7 +65,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.10"
+      version = "~> 0.11"
     }
   }
 }
@@ -158,7 +158,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.10.1`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.11.0`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub
