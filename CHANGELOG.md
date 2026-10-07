@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2
+
+- Matching API changes report manually deleted applications as missing instead of leaving completed requests in `Provisioning`. Terraform refresh removes the old resource from state and the next apply submits a fresh request with the same name and new identifiers, subject to current tenant policy.
+- Release the deleted request's Terraform name reservation while preserving approval history. Existing completed requests whose application was deleted before this fix are repaired during refresh or replacement creation.
+- Cover refresh and recreation for both application resources, and retain state on access-denied and service failures. Deploy the matching API fix; upgrading the provider alone cannot correct stale API responses.
+
 ## 0.11.1
 
 - Expose `minimum_additional_owners` in tenant capabilities and validate known owner sets during planning. Unknown owner IDs remain deferred to apply.

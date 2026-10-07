@@ -7,6 +7,24 @@ description: |-
 
 # Troubleshooting
 
+## Recreate an Application Deleted in AZExecute
+
+With the matching API fix for provider `0.11.2`, run `terraform plan` after manual
+deletion. Refresh reports the old application as missing and plans a new create.
+Applying submits a new application request with a new resource UUID and request
+ID, using the existing Terraform configuration. Approval and minimum-owner rules
+still apply. The old request remains in AZExecute's history.
+
+Older API builds can incorrectly return `Provisioning` with empty application IDs
+and `status_reason = "Application created"`. Update the API and run a fresh plan;
+the API also handles applications deleted before this fix. Do not reuse an old
+saved plan, disable refresh, or manually remove Terraform state to work around it.
+Actual provisioning delays and access errors do not count as confirmed deletion.
+
+API event `4682` (`TerraformDeletedApplicationDetected`) records recovery of an
+older deleted application. Operators can correlate its tenant ID, resource UUID,
+and request ID with the API request logs.
+
 ## Minimum Additional Owners
 
 The tenant's minimum additional-owner setting applies to Terraform, including
