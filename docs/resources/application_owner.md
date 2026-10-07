@@ -96,3 +96,5 @@ terraform import azexecute_application_owner.example 11111111-2222-4333-8444-555
 The first UUID is not the Entra client ID, Entra object ID, or AZExecute
 application entity ID. It is the stable `id` exported by the parent Terraform
 application resource.
+
+Registered automation identities are maintained automatically by the API and do not need individual owner resources. Removing an automation identity through this resource is rejected; use inline ownership if you want to list it explicitly.

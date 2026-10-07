@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.11.6
+
+- Preserve registered automation ownership automatically and repair missing directory ownership during authorized updates, without requiring the identity in `owner_object_ids`.
+- Exclude implicit automation owners from Terraform ownership drift while supporting explicit inclusion and continuing to detect changes to other owners.
+- Keep human-owner minimums and access checks enforced. Deploy the matching API and provider together; no database migration is required for this fix.
+
+## 0.11.5
+
+- Return field validation errors when registration editor values are cleared instead of throwing on null values.
+- Harden the matching API's recovery flow: keep checkpoints and the Terraform name reserved until deletion of a checkpointed enterprise application is confirmed, and explain when directory propagation requires a retry.
+- Refused cleanup leaves completed/imported requests unchanged. Both cleanup actions resolve lost application-creation responses, and Terraform create retries leave administrator-paused requests paused.
+- Show retirement completion in the request flow. Deploy the matching API/UI; no additional migration beyond the existing recovery-flow migration is required.
+
+## 0.11.4
+
+- Explain approval rejection, provisioning, and `NeedsAttention` recovery separately, including request IDs and status reasons. Synchronous creation stops polling paused requests while retaining their identity.
+- Matching API/UI changes add tenant-admin **Clean up and retire** for incomplete or rejected requests. Verified resources are removed before the request is retired and its Terraform name reservation is released; history is retained and the next refreshed plan can create a replacement.
+- Validate owner updates before mutation when they would remove the calling Terraform identity and lock it out. Deploy the matching API/UI and the recovery-flow migration introduced with 0.11.3; upgrading the provider alone is insufficient.
+
+## 0.11.3
+
+- Reject permission values shared by `app_roles` and `exposed_scopes` during planning when values are known, and validate the combined registration before submitting updates. This catches invalid configurations before Microsoft Graph rejects them with a duplicate-values error.
+- Matching API changes validate registration settings before provisioning, record request progress and failures, and provide automatic and administrator-triggered cleanup of partial resources. Deploy the matching API and apply its database migration to use these recovery features.
+
 ## 0.11.2
 
 - Matching API changes report manually deleted applications as missing instead of leaving completed requests in `Provisioning`. Terraform refresh removes the old resource from state and the next apply submits a fresh request with the same name and new identifiers, subject to current tenant policy.

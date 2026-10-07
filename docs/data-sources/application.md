@@ -39,7 +39,7 @@ output "client_id" {
 - `display_name` (String) — application/request display name.
 - `description` (String) — application description when present.
 - `status` (String) — current lifecycle status, such as `PendingApproval`,
-  `Provisioning`, `Ready`, or `Rejected`.
+  `Provisioning`, `NeedsAttention`, `Ready`, or `Rejected`.
 - `status_reason` (String) — status or rejection explanation when present.
 - `request_id` (Number) — numeric AZExecute application request ID.
 - `application_entity_id` (String) — AZExecute application entity UUID;

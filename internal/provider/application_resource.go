@@ -140,7 +140,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"environment":                        schema.StringAttribute{Optional: true},
 			"contact_email":                      schema.StringAttribute{Optional: true},
 			"contact_phone":                      schema.StringAttribute{Optional: true},
-			"owner_object_ids":                   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState, Description: "Authoritative set of Microsoft Entra owner object UUIDs. Omit to adopt existing ownership; set an empty set to remove all owners."},
+			"owner_object_ids":                   schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState, Description: "Authoritative set of customer-managed Microsoft Entra owner object UUIDs. Automation owners are maintained automatically and may be included explicitly. Omit to adopt existing ownership; an empty set removes customer owners subject to tenant policy."},
 			"configure_registration":             schema.BoolAttribute{Optional: true, Description: "Set true to manage the registration fields below."},
 			"sign_in_audience":                   schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState},
 			"is_fallback_public_client":          schema.BoolAttribute{Optional: true, Computed: true, PlanModifiers: useBoolState},
@@ -284,7 +284,11 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 	deadline := time.Now().Add(time.Duration(timeoutMinutes) * time.Minute)
 	for result.Status != "Ready" {
 		if result.Status == "Rejected" {
-			response.Diagnostics.AddError("Application request rejected", stringPointerValue(result.StatusReason, "The AZExecute application request was rejected."))
+			response.Diagnostics.AddError("Application request rejected", applicationNotReadyMessage(result))
+			return
+		}
+		if result.Status == "NeedsAttention" {
+			response.Diagnostics.AddError("Application provisioning needs attention", applicationNotReadyMessage(result))
 			return
 		}
 		if time.Now().After(deadline) {
@@ -377,7 +381,7 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 	if current.Status != "Ready" {
 		response.Diagnostics.AddError(
 			"Application is not ready for updates",
-			fmt.Sprintf("AZExecute reports status %q. Wait for automatic provisioning to finish and run Terraform again.", current.Status))
+			applicationNotReadyMessage(current))
 		return
 	}
 	update, err := updateRequestFromModel(ctx, plan, current)
@@ -518,6 +522,9 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 		if err != nil {
 			return update, err
 		}
+		if err := validateRoleAndScopeValues(registration.AppRoles, registration.API.Scopes); err != nil {
+			return update, err
+		}
 		registration.API.PreAuthorizedApplications, err = clientsFromModel(ctx, model.PreAuthorizedApplications, registration.API.PreAuthorizedApplications)
 		if err != nil {
 			return update, err
@@ -554,7 +561,7 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	target.ContactEmail = stringTypeFromPointer(source.Metadata.ContactEmail)
 	target.ContactPhone = stringTypeFromPointer(source.Metadata.ContactPhone)
 	var ownerDiagnostics diag.Diagnostics
-	target.OwnerObjectIDs, ownerDiagnostics = types.SetValueFrom(ctx, types.StringType, source.OwnerObjectIDs)
+	target.OwnerObjectIDs, ownerDiagnostics = types.SetValueFrom(ctx, types.StringType, managedOwnerObjectIDs(source, target.OwnerObjectIDs))
 	diagnostics.Append(ownerDiagnostics...)
 	target.Status = types.StringValue(source.Status)
 	target.StatusReason = stringTypeFromPointer(source.StatusReason)
@@ -654,6 +661,27 @@ func waitForManagedRegistration(
 			return nil, fmt.Errorf("reload AZExecute application after registration update: %w", err)
 		}
 	}
+}
+
+// Ignore only API-maintained automation identities that were not explicitly
+// configured (or retained in prior state). All other ownership drift remains visible.
+func managedOwnerObjectIDs(source *azclient.Application, desired types.Set) []string {
+	automation := make(map[string]bool, len(source.AutomationOwnerObjectIDs))
+	for _, id := range source.AutomationOwnerObjectIDs {
+		automation[strings.ToLower(id)] = true
+	}
+	for _, value := range desired.Elements() {
+		if id, ok := value.(types.String); ok && !id.IsNull() && !id.IsUnknown() {
+			delete(automation, strings.ToLower(id.ValueString()))
+		}
+	}
+	owners := make([]string, 0, len(source.OwnerObjectIDs))
+	for _, id := range source.OwnerObjectIDs {
+		if !automation[strings.ToLower(id)] {
+			owners = append(owners, id)
+		}
+	}
+	return owners
 }
 
 func managedRegistrationMismatches(ctx context.Context, desired applicationResourceModel, observed *azclient.Application) []string {

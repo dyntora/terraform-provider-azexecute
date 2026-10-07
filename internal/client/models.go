@@ -76,21 +76,22 @@ type PermissionRequestStatus struct {
 }
 
 type Application struct {
-	RequestedRegistration *RegistrationConfiguration `json:"requestedRegistration,omitempty"`
-	ResourceID            string                     `json:"resourceId"`
-	RequestID             int64                      `json:"requestId"`
-	Status                string                     `json:"status"`
-	StatusReason          *string                    `json:"statusReason,omitempty"`
-	ApplicationEntityID   *string                    `json:"applicationEntityId,omitempty"`
-	ApplicationID         *string                    `json:"applicationId,omitempty"`
-	ApplicationObjectID   *string                    `json:"applicationObjectId,omitempty"`
-	DisplayName           string                     `json:"displayName"`
-	Description           *string                    `json:"description,omitempty"`
-	OwnerObjectIDs        []string                   `json:"ownerObjectIds"`
-	Metadata              ApplicationMetadata        `json:"metadata"`
-	Registration          *RegistrationConfiguration `json:"registration,omitempty"`
-	APIPermissionRequests []PermissionRequestStatus  `json:"apiPermissionRequests"`
-	CreatedOn             *time.Time                 `json:"createdOn,omitempty"`
+	RequestedRegistration    *RegistrationConfiguration `json:"requestedRegistration,omitempty"`
+	ResourceID               string                     `json:"resourceId"`
+	RequestID                int64                      `json:"requestId"`
+	Status                   string                     `json:"status"`
+	StatusReason             *string                    `json:"statusReason,omitempty"`
+	ApplicationEntityID      *string                    `json:"applicationEntityId,omitempty"`
+	ApplicationID            *string                    `json:"applicationId,omitempty"`
+	ApplicationObjectID      *string                    `json:"applicationObjectId,omitempty"`
+	DisplayName              string                     `json:"displayName"`
+	Description              *string                    `json:"description,omitempty"`
+	OwnerObjectIDs           []string                   `json:"ownerObjectIds"`
+	AutomationOwnerObjectIDs []string                   `json:"automationOwnerObjectIds"`
+	Metadata                 ApplicationMetadata        `json:"metadata"`
+	Registration             *RegistrationConfiguration `json:"registration,omitempty"`
+	APIPermissionRequests    []PermissionRequestStatus  `json:"apiPermissionRequests"`
+	CreatedOn                *time.Time                 `json:"createdOn,omitempty"`
 }
 
 type ApplicationOwner struct {

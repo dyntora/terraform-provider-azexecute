@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
@@ -219,7 +218,7 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	if current.Status != "Ready" {
 		response.Diagnostics.AddError(
 			"Application request is not ready for updates",
-			fmt.Sprintf("AZExecute reports status %q. Approve and provision the request, then run Terraform again before changing its metadata or registration.", current.Status))
+			applicationNotReadyMessage(current))
 		return
 	}
 

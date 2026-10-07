@@ -56,7 +56,7 @@ func TestExposedScopesPreserveOmittedClearExplicitAndDetectDrift(t *testing.T) {
 }
 func TestPendingAndRejectedRequestsReadStoredRegistrationWithoutLiveObject(t *testing.T) {
 	ctx := context.Background()
-	for _, status := range []string{"PendingApproval", "Provisioning", "Rejected"} {
+	for _, status := range []string{"PendingApproval", "Provisioning", "Rejected", "NeedsAttention"} {
 		desired := applicationResourceModel{ConfigureRegistration: types.BoolValue(true), ExposedScopes: requestedScopeSet(t), IdentifierURIs: stringSet(t, "api://{applicationId}")}
 		create, err := createRequestFromModel(ctx, desired, "11111111-2222-4333-8444-555555555555")
 		if err != nil {
@@ -75,7 +75,7 @@ func TestPendingAndRejectedRequestsReadStoredRegistrationWithoutLiveObject(t *te
 	}
 }
 func TestRequestCreateSubmitsWholeConfigurationWithoutPostApprovalRegistrationPut(t *testing.T) {
-	for _, status := range []string{"PendingApproval", "Ready", "Rejected"} {
+	for _, status := range []string{"PendingApproval", "Ready", "Rejected", "NeedsAttention"} {
 		t.Run(status, func(t *testing.T) {
 			ctx := context.Background()
 			var received azclient.ApplicationCreate

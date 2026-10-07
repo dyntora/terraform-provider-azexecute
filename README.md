@@ -131,6 +131,12 @@ reports missing values. The API validates the same current policy before it
 creates or changes anything, so an invalid request does not leave an orphaned
 approval item.
 
+App-role values and exposed-scope values must be distinct across both collections
+within one application. For example, use `Shipments.Read` for an app role and
+`Shipments.Read.Delegated` for a delegated scope. Different UUIDs do not make
+identical values valid. Known collisions are rejected during planning; apply also
+checks against existing permissions left unmanaged by the configuration.
+
 ## Ownership and Drift
 
 `owner_object_ids` is an authoritative set when configured. Terraform adds
@@ -158,7 +164,7 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 ## Releasing
 
 1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.11.2`.
+2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.11.6`.
 3. The release workflow tests the provider and publishes signed Windows, Linux,
    and macOS archives plus checksums.
 4. The Terraform Registry discovers the tagged release from the public GitHub

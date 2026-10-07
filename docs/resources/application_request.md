@@ -223,6 +223,12 @@ policy can require an enabled field during plan and apply.
   argument to adopt current ownership. Graph-only operational identities used
   by AZExecute are preserved so later app-only updates continue to work.
 
+Registered automation identities for the original requester and current caller
+are maintained automatically, repaired during authorized updates, and excluded
+from implicit ownership drift. Including them explicitly is supported; they
+never count toward the human-owner minimum. Use the matching updated API and
+provider for this behavior.
+
 Use directory object IDs rather than names, emails, client IDs, or AZExecute
 application entity IDs. New entries must resolve as tenant users. An automation
 service principal already registered in AZExecute, such as the calling Azure
@@ -411,7 +417,7 @@ the tenant's separate Terraform permission-flow setting.
 
 - `id` (String) â€” stable provider-generated resource UUID used for idempotency
   and import.
-- `status` (String) â€” `PendingApproval`, `Provisioning`, `Ready`, or `Rejected`.
+- `status` (String) â€” `PendingApproval`, `Provisioning`, `NeedsAttention`, `Ready`, or `Rejected`.
 - `status_reason` (String) â€” status or rejection explanation when supplied.
 - `request_id` (Number) â€” numeric AZExecute application request ID.
 - `application_entity_id` (String) â€” AZExecute application entity UUID;

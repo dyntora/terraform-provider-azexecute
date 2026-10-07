@@ -89,6 +89,16 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 			errors = append(errors, err.Error())
 		}
 	}
+	if boolValue(model.ConfigureRegistration, false) && setIsConfigured(model.AppRoles) && setIsConfigured(model.ExposedScopes) &&
+		fullyKnownSet(model.AppRoles) && fullyKnownSet(model.ExposedScopes) {
+		roles, roleErr := appRolesFromModel(context.Background(), model.AppRoles, nil)
+		scopes, scopeErr := scopesFromModel(context.Background(), model.ExposedScopes, nil)
+		if roleErr == nil && scopeErr == nil {
+			if err := validateRoleAndScopeValues(roles, scopes); err != nil {
+				errors = append(errors, err.Error())
+			}
+		}
+	}
 	if !model.APIPermissionRequests.IsNull() && !model.APIPermissionRequests.IsUnknown() && len(model.APIPermissionRequests.Elements()) > 0 && !capabilities.AllowAPIPermissionRequests {
 		errors = append(errors, "api_permission_request cannot be used because API permission requests are disabled by the tenant policy")
 	}
@@ -190,6 +200,20 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 
 func missingString(value types.String) bool {
 	return value.IsNull() || value.IsUnknown() || strings.TrimSpace(value.ValueString()) == "" || strings.EqualFold(strings.TrimSpace(value.ValueString()), "Not provided")
+}
+
+func validateRoleAndScopeValues(roles []azclient.AppRoleConfiguration, scopes []azclient.PermissionScopeConfiguration) error {
+	values := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		values[strings.ToLower(strings.TrimSpace(role.Value))] = true
+	}
+	for _, scope := range scopes {
+		value := strings.TrimSpace(scope.Value)
+		if value != "" && values[strings.ToLower(value)] {
+			return fmt.Errorf("permission value %q is used by both app_roles and exposed_scopes; app roles and exposed scopes must have distinct values", value)
+		}
+	}
+	return nil
 }
 
 func validateStringLength(name string, value types.String, minimum, maximum int) []string {

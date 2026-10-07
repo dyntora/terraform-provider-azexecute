@@ -7,6 +7,46 @@ description: |-
 
 # Troubleshooting
 
+## Failed or Rejected Requests: Start Over
+
+Deploy the matching API/UI and provider `0.11.5`. The API requires the recovery-flow
+migration documented with `0.11.3`; apply it through your normal operator process
+before deployment.
+
+In the tenant-admin application request details, use **Clean up and retire** to
+start over with an incomplete or rejected request. This verifies and removes
+resources created by that request, preserves its history, and releases its
+Terraform name reservation. If cleanup fails, the request remains present and its
+resource references are retained for another attempt. An application already
+managed in AZExecute must be deleted from **Applications** first.
+
+If Entra is still removing the checkpointed enterprise application, cleanup keeps
+the request reserved and explains that you must wait and retry. It does not treat
+an access-denied or inconclusive directory read as successful deletion.
+
+After successful retirement, fix the Terraform configuration and run a fresh
+`terraform plan` and `terraform apply`. The replacement receives new resource and
+request IDs and follows current approval and owner requirements. Do not reuse a
+saved plan or remove state manually: state removal does not clean up Azure objects
+or release the API's name reservation.
+
+**Clean up partial resources** is different: it leaves the same request paused for
+review and retry. `NeedsAttention` means administrator recovery is required;
+`Rejected` with a decision reason means approval was denied. Neither status is
+automatically treated as deletion.
+
+## Terraform Identity Lost Application Access
+
+An HTTP 403 does not mean the application is missing. A tenant administrator must
+restore the Terraform identity as an application owner, or explicitly delete the
+application through AZExecute if it should be replaced. The API automatically
+preserves registered automation owners and repairs their ownership during updates
+that the caller is authorized to perform. You may include the automation identity
+in `owner_object_ids`, but it is no longer required. Use provider `0.11.6` or later
+and the matching API so implicit automation ownership does not appear as drift.
+Automation identities do not satisfy the human-owner minimum. A caller that has
+already lost access still needs an administrator to restore it before updating.
+
 ## Recreate an Application Deleted in AZExecute
 
 With the matching API fix for provider `0.11.2`, run `terraform plan` after manual
