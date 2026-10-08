@@ -114,7 +114,6 @@ func (r *applicationResource) Schema(_ context.Context, _ resource.SchemaRequest
 }
 
 func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
-	replaceString := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 	useStringState := []planmodifier.String{stringplanmodifier.UseStateForUnknown()}
 	useBoolState := []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()}
 	useInt64State := []planmodifier.Int64{int64planmodifier.UseStateForUnknown()}
@@ -124,8 +123,8 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
 			"id":                                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Stable Terraform resource UUID used for API idempotency."},
-			"display_name":                       schema.StringAttribute{Required: true, PlanModifiers: replaceString},
-			"description":                        schema.StringAttribute{Optional: true, PlanModifiers: replaceString},
+			"display_name":                       schema.StringAttribute{Required: true},
+			"description":                        schema.StringAttribute{Optional: true},
 			"business_justification":             schema.StringAttribute{Optional: true, Computed: true, PlanModifiers: useStringState, Description: "Business reason for the application. Required only when the tenant metadata policy requires it."},
 			"technical_requirements":             schema.StringAttribute{Optional: true},
 			"intended_audience":                  schema.StringAttribute{Optional: true},
@@ -495,6 +494,19 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 		return azclient.ApplicationUpdate{}, err
 	}
 	update := azclient.ApplicationUpdate{Metadata: metadata, OwnerObjectIDs: owners}
+	details := &azclient.ApplicationDetailsUpdate{}
+	if !model.DisplayName.IsNull() && !model.DisplayName.IsUnknown() && model.DisplayName.ValueString() != current.DisplayName {
+		details.DisplayName = stringPointer(model.DisplayName)
+		details.ExpectedDisplayName = &current.DisplayName
+	}
+	if !model.Description.IsUnknown() && !model.Description.Equal(stringTypeFromPointer(current.Description)) {
+		details.UpdateDescription = true
+		details.Description = stringPointer(model.Description)
+		details.ExpectedDescription = current.Description
+	}
+	if details.DisplayName != nil || details.UpdateDescription {
+		update.Details = details
+	}
 	if boolValue(model.ConfigureRegistration, false) {
 		if current.Registration == nil {
 			return update, fmt.Errorf("the tenant API did not return registration configuration; confirm the Terraform registration policy is enabled")
@@ -541,7 +553,11 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 func mapApplicationToModel(ctx context.Context, source *azclient.Application, target *applicationResourceModel, diagnostics *diag.Diagnostics) {
 	target.ID = types.StringValue(source.ResourceID)
 	target.DisplayName = types.StringValue(source.DisplayName)
-	target.Description = stringTypeFromPointer(source.Description)
+	// Entra can normalize an explicitly empty description to null. Preserve a
+	// configured empty string while still reflecting an actual removal as null.
+	if source.Description != nil || target.Description.IsNull() || target.Description.IsUnknown() || target.Description.ValueString() != "" {
+		target.Description = stringTypeFromPointer(source.Description)
+	}
 	target.BusinessJustification = types.StringValue(source.Metadata.BusinessJustification)
 	target.TechnicalRequirements = stringTypeFromPointer(source.Metadata.TechnicalRequirements)
 	target.IntendedAudience = stringTypeFromPointer(source.Metadata.IntendedAudience)

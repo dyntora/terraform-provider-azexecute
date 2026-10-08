@@ -80,6 +80,7 @@ resource_fields=(
 )
 
 capability_fields=(
+  supports_application_details_updates
   minimum_additional_owners
   id api_version supports_registration_requests enabled allow_application_creation allow_application_deletion
   allow_api_permission_requests allow_registration_configuration

@@ -7,7 +7,7 @@ description: |-
 
 # azexecute_event_listener (Resource)
 
-Manages one listener through the shared public `api/v1/EventListeners` API. Multiple resources may target the same application. Available from provider version 0.9.0. Requires a server with event-listener catalog/task discovery support and the application-event authorization migration. It does not apply migrations or create a task.
+Manages one application event listener. Multiple resources may target the same application. Available from provider version 0.9.0. Task actions use existing tasks that the authenticated identity is permitted to execute.
 
 Application owners can manage self-service listeners using published User tasks or active User/Editor/Owner task grants to their user, tenant group, or User role. Viewer grants do not allow execution. Ownership and task access are checked again for future runs; approvals remain in force. Operator/TenantAdmin callers can also manage broad listeners and TOPdesk actions. Saving an owner rule as an operator makes it operator-managed. Use a stable authenticated identity for ongoing management; a service principal does not impersonate a human owner.
 

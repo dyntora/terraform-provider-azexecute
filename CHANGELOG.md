@@ -1,45 +1,51 @@
 # Changelog
 
+## 0.11.7
+
+- Update `display_name` and `description` in place on ready applications, preserving request, resource, client and object IDs in both application resources. Removing `description` explicitly clears it.
+- Preserve approval history when updating application details.
+- Detect conflicting name and description edits and report when a fresh plan is needed. Unsupported edits return an error instead of replacing the application.
+
 ## 0.11.6
 
 - Preserve registered automation ownership automatically and repair missing directory ownership during authorized updates, without requiring the identity in `owner_object_ids`.
 - Exclude implicit automation owners from Terraform ownership drift while supporting explicit inclusion and continuing to detect changes to other owners.
-- Keep human-owner minimums and access checks enforced. Deploy the matching API and provider together; no database migration is required for this fix.
+- Keep human-owner minimums and access checks enforced.
 
 ## 0.11.5
 
 - Return field validation errors when registration editor values are cleared instead of throwing on null values.
-- Harden the matching API's recovery flow: keep checkpoints and the Terraform name reserved until deletion of a checkpointed enterprise application is confirmed, and explain when directory propagation requires a retry.
+- Keep an application's name reserved until cleanup is confirmed, and explain when directory propagation requires a retry.
 - Refused cleanup leaves completed/imported requests unchanged. Both cleanup actions resolve lost application-creation responses, and Terraform create retries leave administrator-paused requests paused.
-- Show retirement completion in the request flow. Deploy the matching API/UI; no additional migration beyond the existing recovery-flow migration is required.
+- Show retirement completion in the request flow.
 
 ## 0.11.4
 
 - Explain approval rejection, provisioning, and `NeedsAttention` recovery separately, including request IDs and status reasons. Synchronous creation stops polling paused requests while retaining their identity.
-- Matching API/UI changes add tenant-admin **Clean up and retire** for incomplete or rejected requests. Verified resources are removed before the request is retired and its Terraform name reservation is released; history is retained and the next refreshed plan can create a replacement.
-- Validate owner updates before mutation when they would remove the calling Terraform identity and lock it out. Deploy the matching API/UI and the recovery-flow migration introduced with 0.11.3; upgrading the provider alone is insufficient.
+- Add tenant-admin **Clean up and retire** for incomplete or rejected requests. Cleanup preserves history and allows the next refreshed plan to create a replacement.
+- Reject owner updates that would remove the calling Terraform identity and lock it out.
 
 ## 0.11.3
 
 - Reject permission values shared by `app_roles` and `exposed_scopes` during planning when values are known, and validate the combined registration before submitting updates. This catches invalid configurations before Microsoft Graph rejects them with a duplicate-values error.
-- Matching API changes validate registration settings before provisioning, record request progress and failures, and provide automatic and administrator-triggered cleanup of partial resources. Deploy the matching API and apply its database migration to use these recovery features.
+- Improve request progress and failure reporting, and support cleanup of partially created applications.
 
 ## 0.11.2
 
-- Matching API changes report manually deleted applications as missing instead of leaving completed requests in `Provisioning`. Terraform refresh removes the old resource from state and the next apply submits a fresh request with the same name and new identifiers, subject to current tenant policy.
+- Report manually deleted applications as missing instead of leaving completed requests in `Provisioning`. Terraform refresh removes the old resource from state and the next apply submits a fresh request with the same name and new identifiers, subject to current tenant policy.
 - Release the deleted request's Terraform name reservation while preserving approval history. Existing completed requests whose application was deleted before this fix are repaired during refresh or replacement creation.
-- Cover refresh and recreation for both application resources, and retain state on access-denied and service failures. Deploy the matching API fix; upgrading the provider alone cannot correct stale API responses.
+- Retain state on access-denied and service failures for both application resources.
 
 ## 0.11.1
 
 - Expose `minimum_additional_owners` in tenant capabilities and validate known owner sets during planning. Unknown owner IDs remain deferred to apply.
-- Matching API changes enforce the tenant's additional-owner minimum before creation, updates and owner removal. The original requester, service principals and deleted users do not satisfy the requirement; failures identify `owner_object_ids` and explain how to fix the request.
+- Enforce the tenant's additional-owner minimum before creation, updates and owner removal. The original requester, service principals and deleted users do not satisfy the requirement; failures identify `owner_object_ids` and explain how to fix the request.
 
 ## 0.11.0
 
 - Show every API validation error with its Terraform field name, nested item index, error code and one correlation reference across application, owner and event-listener operations.
-- Send empty registration and permission-request collections as arrays instead of null, avoiding ASP.NET model-validation failures for omitted optional configuration.
-- Matching API changes preserve nested validation paths, return all metadata and permission-block issues, and distinguish input errors from dependency timeouts and unexpected server failures.
+- Fix validation failures when optional registration settings or permission requests are omitted.
+- Report all metadata and permission-block validation issues, and distinguish invalid input from service timeouts and failures.
 
 ## 0.10.1
 
@@ -49,8 +55,8 @@
 
 - Submit complete registration configuration with application requests, for approval and server-side provisioning without a follow-up Terraform apply.
 - Add authoritative `exposed_scopes` and `pre_authorized_applications` to both application resources, including drift detection and safe omission.
-- Preserve existing API v1 clients; new request configuration requires `supports_registration_requests`.
-- Upgrade application state schemas from versions 0–2 to version 3 without recreating requests or adopting unmanaged scopes.
+- Preserve compatibility with existing configurations.
+- Upgrade existing application state without recreating requests or adopting unmanaged scopes.
 
 ## 0.9.0
 
@@ -73,18 +79,12 @@
 - Fixes registration updates failing with `Provider produced inconsistent
   result after apply` when an immediate AZExecute or Microsoft Graph read
   returns the pre-update registration.
-- Verifies every managed registration field after updates and retries stale
-  reads before committing Terraform state.
-- Works with the matching AZExecute API change that returns the confirmed
-  Microsoft Entra write result instead of replacing it with a stale replica
-  read.
+- Waits for registration changes to become visible before reporting success.
 
 ## 0.7.0
 
-- Fixes perpetual update plans by retaining stable computed state during
-  in-place changes.
-- Fixes HTTP 405 failures during updates by reading the stable resource UUID
-  from existing Terraform state rather than an unknown planned value.
+- Fixes perpetual update plans after in-place changes.
+- Fixes HTTP 405 failures during application updates.
 - Adds `azexecute_application_owner` for atomic, independently managed owners
   on pending requests and provisioned applications.
 - Supports inline authoritative ownership, individual owner resources, or
@@ -97,13 +97,13 @@
 - Adds authoritative application ownership through `owner_object_ids`.
 - Refresh detects manual owner changes; apply adds missing owners and removes
   unexpected owners in both Microsoft Entra and AZExecute.
-- Expands the Azure DevOps test module to exercise every supported metadata,
-  registration, ownership, and permission-request option.
+- Expands Azure DevOps examples with metadata, registration, ownership, and
+  permission-request options.
 
 ## 0.6.0
 
 - AZExecute application entity identifiers are UUID strings across resources,
-  data sources, internal permission targets, and imported state.
+  data sources, permission targets, and imported state.
 - Existing provider state is upgraded automatically without recreating managed
   applications.
 
@@ -120,9 +120,6 @@
   optional in Terraform while tenant requirements are enforced dynamically.
 - Adds complete Azure DevOps, GitHub Actions, import, migration, automatic-flow,
   and approval-flow examples.
-- Adds release checks that reject mismatched tags, stale version references,
-  missing Registry front matter, incomplete field coverage, and unexpectedly
-  small resource references.
 
 ## 0.4.0
 

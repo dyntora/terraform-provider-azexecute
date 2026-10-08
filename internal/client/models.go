@@ -3,18 +3,19 @@ package client
 import "time"
 
 type Capabilities struct {
-	MinimumAdditionalOwners        int64    `json:"minimumAdditionalOwners"`
-	SupportsRegistrationRequests   bool     `json:"supportsRegistrationRequests"`
-	APIVersion                     string   `json:"apiVersion"`
-	Enabled                        bool     `json:"enabled"`
-	AllowApplicationCreation       bool     `json:"allowApplicationCreation"`
-	AllowApplicationDeletion       bool     `json:"allowApplicationDeletion"`
-	AllowAPIPermissionRequests     bool     `json:"allowApiPermissionRequests"`
-	AllowRegistrationConfiguration bool     `json:"allowRegistrationConfiguration"`
-	UseApplicationRequestFlow      bool     `json:"useApplicationRequestFlow"`
-	UseAPIPermissionRequestFlow    bool     `json:"useApiPermissionRequestFlow"`
-	IncludedMetadataFields         []string `json:"includedMetadataFields"`
-	RequiredMetadataFields         []string `json:"requiredMetadataFields"`
+	SupportsApplicationDetailsUpdates bool     `json:"supportsApplicationDetailsUpdates"`
+	MinimumAdditionalOwners           int64    `json:"minimumAdditionalOwners"`
+	SupportsRegistrationRequests      bool     `json:"supportsRegistrationRequests"`
+	APIVersion                        string   `json:"apiVersion"`
+	Enabled                           bool     `json:"enabled"`
+	AllowApplicationCreation          bool     `json:"allowApplicationCreation"`
+	AllowApplicationDeletion          bool     `json:"allowApplicationDeletion"`
+	AllowAPIPermissionRequests        bool     `json:"allowApiPermissionRequests"`
+	AllowRegistrationConfiguration    bool     `json:"allowRegistrationConfiguration"`
+	UseApplicationRequestFlow         bool     `json:"useApplicationRequestFlow"`
+	UseAPIPermissionRequestFlow       bool     `json:"useApiPermissionRequestFlow"`
+	IncludedMetadataFields            []string `json:"includedMetadataFields"`
+	RequiredMetadataFields            []string `json:"requiredMetadataFields"`
 }
 
 type ApplicationCreate struct {
@@ -28,9 +29,18 @@ type ApplicationCreate struct {
 }
 
 type ApplicationUpdate struct {
+	Details        *ApplicationDetailsUpdate  `json:"details,omitempty"`
 	Metadata       ApplicationMetadata        `json:"metadata"`
 	OwnerObjectIDs *[]string                  `json:"ownerObjectIds,omitempty"`
 	Registration   *RegistrationConfiguration `json:"registration,omitempty"`
+}
+
+type ApplicationDetailsUpdate struct {
+	DisplayName         *string `json:"displayName,omitempty"`
+	ExpectedDisplayName *string `json:"expectedDisplayName,omitempty"`
+	UpdateDescription   bool    `json:"updateDescription"`
+	Description         *string `json:"description"`
+	ExpectedDescription *string `json:"expectedDescription"`
 }
 
 type ApplicationMetadata struct {

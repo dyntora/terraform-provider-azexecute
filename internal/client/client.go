@@ -115,6 +115,15 @@ func (c *Client) GetApplication(ctx context.Context, resourceID string) (*Applic
 }
 
 func (c *Client) UpdateApplication(ctx context.Context, resourceID string, request ApplicationUpdate) (*Application, error) {
+	if request.Details != nil {
+		capabilities, err := c.Capabilities(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !capabilities.SupportsApplicationDetailsUpdates {
+			return nil, fmt.Errorf("this API does not support in-place display_name or description updates; upgrade AZExecute before applying this change")
+		}
+	}
 	var result Application
 	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID)
 	return &result, c.do(ctx, http.MethodPut, path, request, &result)

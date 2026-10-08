@@ -161,13 +161,4 @@ go build ./...
 For local Terraform testing, build the provider and configure a Terraform CLI
 `dev_overrides` entry as shown in [`.terraformrc.example`](.terraformrc.example).
 
-## Releasing
-
-1. Configure the Terraform Registry signing key and GitHub release secrets.
-2. Push an annotated semantic-version tag matching `VERSION`, such as `v0.11.6`.
-3. The release workflow tests the provider and publishes signed Windows, Linux,
-   and macOS archives plus checksums.
-4. The Terraform Registry discovers the tagged release from the public GitHub
-   repository.
-
 The provider is licensed under the Mozilla Public License 2.0.

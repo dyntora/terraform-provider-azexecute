@@ -87,7 +87,7 @@ Terraform state and supported registration settings are applied.
 - If automatic provisioning exceeds `create_timeout_minutes`, apply returns an
   error. The stable provider-generated UUID lets the next apply resume the same
   request without creating a duplicate.
-- `description` and `api_permission_request` changes replace the resource.
+- `api_permission_request` changes replace the resource.
 - Metadata and supported registration fields update in place after the
   application is ready.
 
@@ -96,7 +96,24 @@ Terraform state and supported registration settings are applied.
 ### Required
 
 - `display_name` (String) â€” Microsoft Entra application display name. Must
-  contain `1`â€“`200` characters. Changing it replaces the resource.
+  contain `1`â€“`200` characters. Changing it updates the ready application in place.
+
+### In-place application details
+
+Provider `0.11.7` and an API advertising `supports_application_details_updates`
+update `display_name` and `description` on the existing ready application. These
+changes preserve the resource UUID, request ID, Entra object ID and client ID.
+Removing `description` clears it. The API confirms the Graph update before
+returning success; concurrent edits report a conflict requiring a fresh plan.
+An older API rejects these edits with an upgrade message instead of replacement.
+These edits use the existing Terraform access and metadata rules and do not
+require `configure_registration` or permission to delete applications.
+
+The original approval request remains an audit snapshot, including its original
+name and description. Its original creation name remains reserved until the
+resource is retired; renaming changes the live application's display name.
+Pending/rejected requests must complete the existing approval/recovery flow
+before live details can be changed. A description edit never approves a request.
 
 ### Optional Metadata
 
@@ -104,7 +121,7 @@ All metadata fields are optional in Terraform. The tenant's live metadata
 policy can require an enabled field during plan and apply.
 
 - `description` (String) â€” application description, up to `500` characters.
-  Changing it replaces the resource.
+  Changing it updates the ready application in place.
 - `business_justification` (String) â€” business reason, `5`â€“`1000` characters
   when supplied. Optional and computed because AZExecute can normalize an
   omitted value.
@@ -144,8 +161,8 @@ policy can require an enabled field during plan and apply.
 Registered automation identities for the original requester and current caller
 are maintained automatically, repaired during authorized updates, and excluded
 from implicit ownership drift. Including them explicitly is supported; they
-never count toward the human-owner minimum. Use the matching updated API and
-provider for this behavior.
+never count toward the human-owner minimum. Use provider `0.11.6` or later for
+this behavior.
 
 Use directory object IDs rather than names, emails, client IDs, or AZExecute
 application entity IDs. New entries must resolve as tenant users. An automation

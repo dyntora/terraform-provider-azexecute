@@ -30,6 +30,8 @@ output "required_metadata_fields" {
 
 ## Schema
 
+- `supports_application_details_updates` (Boolean) — whether the API supports in-place display-name and description updates on ready applications.
+
 This data source has no arguments.
 
 ### Read-Only

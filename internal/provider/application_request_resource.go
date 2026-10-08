@@ -102,6 +102,7 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 		}
 	}
 	errors := validateApplicationPlan(plan.toApplicationModel(), capabilities, request.State.Raw.IsNull())
+	validateApplicationDetailsPlan(ctx, request, response, capabilities)
 	if len(errors) > 0 {
 		response.Diagnostics.AddError("Invalid application request configuration for this AZExecute tenant", strings.Join(errors, "\n"))
 	}

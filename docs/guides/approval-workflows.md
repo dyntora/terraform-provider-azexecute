@@ -21,8 +21,8 @@ combinations without weakening tenant governance.
 5. Approval queues durable background provisioning. Rejection changes the
    request to `Rejected`.
 6. Run Terraform again. A read refreshes the status once.
-7. When AZExecute reports `Ready`, Terraform records the Entra identifiers and
-   applies configured registration settings.
+7. When AZExecute reports `Ready`, Terraform records the Entra identifiers.
+   AZExecute has already applied the requested registration settings.
 
 Terraform never approves its own request. Approval remains an administrative
 AZExecute action.
@@ -90,6 +90,18 @@ registrations after creation. Existing live updates use concurrency tokens and
 preserve omitted scopes and clients.
 
 ## Destroy Behavior
+
+If a previously provisioned application is subsequently removed from AZExecute
+and Entra, AZExecute retires the old Terraform association and releases
+its creation-name reservation. The original request remains as history. A normal
+refreshed Terraform plan reports a creation; apply submits a **new request** with
+a new resource UUID. Current tenant policy still applies: automatic approval
+starts provisioning, while manual approval returns `PendingApproval`. The new
+Entra application receives a new client ID; recreation cannot preserve it.
+
+An application that is still provisioning is not treated as deleted. Access
+denials and service failures must not remove the resource from Terraform state.
+Do not disable refresh when recovering a deleted application.
 
 - Destroying a pending approval request cancels it and does not require
   application-deletion permission because no Entra application exists.

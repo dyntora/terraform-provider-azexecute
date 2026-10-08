@@ -17,8 +17,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: false
       - name: Validate Registry documentation and release version
         run: bash scripts/check-release-docs.sh
-      - run: go test -race ./...
+      - run: AZEXECUTE_TERRAFORM_EXECUTABLE="$(command -v terraform)" go test -race ./...
       - run: go vet ./...
       - run: test -z "$(gofmt -l .)"

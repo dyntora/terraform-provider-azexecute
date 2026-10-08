@@ -7,11 +7,20 @@ description: |-
 
 # Troubleshooting
 
-## Failed or Rejected Requests: Start Over
+## Description or Name Changes Plan a Replacement
 
-Deploy the matching API/UI and provider `0.11.5`. The API requires the recovery-flow
-migration documented with `0.11.3`; apply it through your normal operator process
-before deployment.
+Use provider `0.11.7` or later. Description and
+display-name edits now update a ready application in place; other metadata such
+as department and project already supports in-place changes. Check the complete
+plan for other replacement triggers, including changes to `api_permission_request`.
+
+The provider requires `supports_application_details_updates` for name/description
+edits. If AZExecute reports that these edits are unsupported, contact support;
+the application will not be replaced. Clearing a description is supported. Directory edits are read during
+refresh; a detected concurrency conflict requires a fresh plan before retrying.
+
+
+## Failed or Rejected Requests: Start Over
 
 In the tenant-admin application request details, use **Clean up and retire** to
 start over with an incomplete or rejected request. This verifies and removes
@@ -20,7 +29,7 @@ Terraform name reservation. If cleanup fails, the request remains present and it
 resource references are retained for another attempt. An application already
 managed in AZExecute must be deleted from **Applications** first.
 
-If Entra is still removing the checkpointed enterprise application, cleanup keeps
+If Entra is still removing the enterprise application, cleanup keeps
 the request reserved and explains that you must wait and retry. It does not treat
 an access-denied or inconclusive directory read as successful deletion.
 
@@ -43,27 +52,23 @@ application through AZExecute if it should be replaced. The API automatically
 preserves registered automation owners and repairs their ownership during updates
 that the caller is authorized to perform. You may include the automation identity
 in `owner_object_ids`, but it is no longer required. Use provider `0.11.6` or later
-and the matching API so implicit automation ownership does not appear as drift.
+so implicit automation ownership does not appear as drift.
 Automation identities do not satisfy the human-owner minimum. A caller that has
 already lost access still needs an administrator to restore it before updating.
 
 ## Recreate an Application Deleted in AZExecute
 
-With the matching API fix for provider `0.11.2`, run `terraform plan` after manual
-deletion. Refresh reports the old application as missing and plans a new create.
+Run `terraform plan` after manual deletion. Refresh reports the old application
+as missing and plans a new create.
 Applying submits a new application request with a new resource UUID and request
 ID, using the existing Terraform configuration. Approval and minimum-owner rules
 still apply. The old request remains in AZExecute's history.
 
-Older API builds can incorrectly return `Provisioning` with empty application IDs
-and `status_reason = "Application created"`. Update the API and run a fresh plan;
-the API also handles applications deleted before this fix. Do not reuse an old
+If a deleted application remains in `Provisioning` with empty application IDs
+and `status_reason = "Application created"`, contact support with the request ID.
+Do not reuse an old
 saved plan, disable refresh, or manually remove Terraform state to work around it.
 Actual provisioning delays and access errors do not count as confirmed deletion.
-
-API event `4682` (`TerraformDeletedApplicationDetected`) records recovery of an
-older deleted application. Operators can correlate its tenant ID, resource UUID,
-and request ID with the API request logs.
 
 ## Minimum Additional Owners
 
@@ -102,15 +107,11 @@ so also use the role, scope or permission named in the message to locate the ite
 The HTTP API retains full paths such as `metadata.projectName`; the provider
 translates these into Terraform attribute names.
 
-Deploy both the API and provider fixes to receive the complete diagnostics. Older
-providers ignore the API's `errors` object. Older providers can also send unused
-registration collections as `null`, causing required-field errors even when no
-redirect URI or pre-authorized client was configured. The updated provider sends
-empty arrays for those collections.
+Use provider `0.11.0` or later for complete validation diagnostics and fixes for
+required-field errors on omitted optional registration settings.
 
-If no field details are returned, give the reference to an administrator. They
-can find the original exception and API failure event using the same `TraceId` in
-server logs. A generic summary alone does not establish which field was invalid.
+If no field details are returned, give the error reference to support. A generic
+summary alone does not establish which field was invalid.
 
 ## A Metadata Field Is Reported as Required
 
@@ -217,9 +218,7 @@ call the collection endpoint without a resource UUID, resulting in HTTP 405.
 
 Provider `0.7.1` also protects registration updates from Microsoft Graph
 replication delay. It verifies every managed registration field and retries a
-stale post-update read before writing Terraform state. Deploy the matching
-AZExecute API build so the update endpoint returns the configuration that
-Microsoft Entra already confirmed.
+stale post-update read before writing Terraform state.
 
 Run `terraform init -upgrade`, confirm provider `0.7.0` or newer, and apply the
 one real registration or metadata change left in the plan. The following plan

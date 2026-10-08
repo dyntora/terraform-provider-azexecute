@@ -15,6 +15,7 @@ func terraformFieldName(field string) string {
 	field = fieldAcronymBoundary.ReplaceAllString(field, "${1}_${2}")
 	field = strings.ToLower(fieldWordBoundary.ReplaceAllString(field, "${1}_${2}"))
 	field = strings.TrimPrefix(field, "metadata.")
+	field = strings.TrimPrefix(field, "details.")
 	for _, mapping := range [][2]string{
 		{"registration.api.pre_authorized_applications", "pre_authorized_applications"},
 		{"registration.api.scopes", "exposed_scopes"},
