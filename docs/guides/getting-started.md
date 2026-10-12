@@ -49,7 +49,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.11"
+      version = "~> 0.12"
     }
   }
 }
@@ -91,12 +91,16 @@ terraform apply
 
 An automatic tenant may return `Ready` immediately or return `Provisioning`
 while the background workflow completes. An approval tenant returns
-`PendingApproval`. Both are successful Terraform applies.
+`PendingApproval`. Both are successful Terraform applies with the default
+asynchronous behavior. Provider 0.12.0 adds optional
+`wait_for_completion = true` to wait during apply; see the
+[resource comparison](../index.md#choose-a-resource) and
+[waiting controls](../resources/application_request.md).
 
 When the result is not yet `Ready`, approve the request if necessary, wait for
 AZExecute provisioning, and run Terraform again. The second run refreshes the
-status and applies configured registration settings once the application is
-ready.
+status and generated identifiers. AZExecute applies creation-time registration
+settings before reporting `Ready`; a second apply is not needed to provision them.
 
 ## 5. Read the Outputs
 

@@ -101,10 +101,16 @@ and verifies the HashiCorp release on a Microsoft-hosted Ubuntu agent.
 
 ## Approval-Based Runs
 
-With `azexecute_application_request`, the first run can finish successfully with
+With `azexecute_application_request` and its default asynchronous behavior, the first run can finish successfully with
 `status = "PendingApproval"`. After an administrator approves the request and
 AZExecute finishes provisioning, run the same pipeline again. The later run
-refreshes the identifiers and applies configured registration settings.
+refreshes the identifiers. AZExecute applies creation-time registration settings
+before reporting `Ready`; no second apply is needed to provision those settings.
+
+Provider 0.12.0 adds `wait_for_completion = true` to keep apply
+running through approval and provisioning. Waiting holds the Terraform state lock;
+leave it disabled when approvals happen outside the pipeline. See the
+[resource comparison](../index.md#choose-a-resource).
 
 The pipeline should therefore be safe to run repeatedly: plan the checked-in
 configuration and apply only when Terraform reports a change. It does not need

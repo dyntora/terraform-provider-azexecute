@@ -44,8 +44,10 @@ moved {
 }
 ```
 
-Remove `poll_interval_seconds` and `create_timeout_minutes`; the asynchronous
-resource does not wait. Provider `0.5` supplies a cross-resource state mover
+For provider `0.5`, remove `poll_interval_seconds` and `create_timeout_minutes`;
+that version's request resource does not wait. Provider 0.12.0 adds optional
+request waiting; see the [resource comparison](../index.md#choose-a-resource).
+Provider `0.5` supplies a cross-resource state mover
 that converts state while preserving the stable AZExecute resource UUID and all
 managed values.
 

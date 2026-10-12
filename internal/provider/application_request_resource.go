@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"strings"
+	"time"
 
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -21,6 +22,9 @@ var _ resource.ResourceWithUpgradeState = &applicationRequestResource{}
 type applicationRequestResource struct{ client *azclient.Client }
 
 type applicationRequestResourceModel struct {
+	WaitForCompletion                types.Bool   `tfsdk:"wait_for_completion"`
+	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
+	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
 	ID                               types.String `tfsdk:"id"`
 	DisplayName                      types.String `tfsdk:"display_name"`
 	Description                      types.String `tfsdk:"description"`
@@ -71,7 +75,7 @@ func (r *applicationRequestResource) Metadata(_ context.Context, request resourc
 
 func (r *applicationRequestResource) Schema(_ context.Context, _ resource.SchemaRequest, response *resource.SchemaResponse) {
 	response.Schema = managedApplicationSchema(false)
-	response.Schema.Description = "Submits an AZExecute application request and records its status without waiting for human approval or background provisioning."
+	response.Schema.Description = "Submits an AZExecute application request and records its status. Optionally waits for approval and background provisioning with wait_for_completion."
 }
 
 func (r *applicationRequestResource) Configure(_ context.Context, request resource.ConfigureRequest, response *resource.ConfigureResponse) {
@@ -87,6 +91,21 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
 	if response.Diagnostics.HasError() {
 		return
+	}
+	if err := plan.validateWaitSettings(); err != nil {
+		response.Diagnostics.AddError("Invalid polling configuration", err.Error())
+		return
+	}
+	if boolValue(plan.WaitForCompletion, false) && !request.State.Raw.IsNull() {
+		var status types.String
+		response.Diagnostics.Append(request.State.GetAttribute(ctx, path.Root("status"), &status)...)
+		if status.ValueString() != "Ready" {
+			// Waiting can complete an existing asynchronous request during this apply.
+			// Its generated identifiers and status must not be planned as their old values.
+			for _, name := range []string{"status", "status_reason", "application_entity_id", "application_id", "application_object_id"} {
+				response.Diagnostics.Append(response.Plan.SetAttribute(ctx, path.Root(name), types.StringUnknown())...)
+			}
+		}
 	}
 
 	capabilities, err := r.client.Capabilities(ctx)
@@ -112,6 +131,10 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 	var plan applicationRequestResourceModel
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
 	if response.Diagnostics.HasError() || r.client == nil {
+		return
+	}
+	if err := plan.validateWaitSettings(); err != nil {
+		response.Diagnostics.AddError("Invalid polling configuration", err.Error())
 		return
 	}
 
@@ -141,6 +164,21 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 	response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
 	if response.Diagnostics.HasError() {
 		return
+	}
+
+	if boolValue(plan.WaitForCompletion, false) {
+		result, err = r.waitForRequest(ctx, plan, result)
+		mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
+		response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
+		if err != nil {
+			response.Diagnostics.AddError("Application request did not complete", err.Error())
+			return
+		}
+		if response.Diagnostics.HasError() {
+			return
+		}
+	} else {
+		warnApplicationRequestFailure(result, &response.Diagnostics)
 	}
 
 	// New API requests are fully configured by approved provisioning. Keep the legacy
@@ -193,6 +231,7 @@ func (r *applicationRequestResource) Read(ctx context.Context, request resource.
 	mapApplicationToRequestModel(ctx, result, &state, &response.Diagnostics)
 	if !response.Diagnostics.HasError() {
 		response.Diagnostics.Append(response.State.Set(ctx, &state)...)
+		warnApplicationRequestFailure(result, &response.Diagnostics)
 	}
 }
 
@@ -202,6 +241,10 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	response.Diagnostics.Append(request.Plan.Get(ctx, &plan)...)
 	response.Diagnostics.Append(request.State.Get(ctx, &state)...)
 	if response.Diagnostics.HasError() || r.client == nil {
+		return
+	}
+	if err := plan.validateWaitSettings(); err != nil {
+		response.Diagnostics.AddError("Invalid polling configuration", err.Error())
 		return
 	}
 
@@ -215,6 +258,15 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	if err != nil {
 		response.Diagnostics.AddError("Unable to read AZExecute application request before update", err.Error())
 		return
+	}
+	if boolValue(plan.WaitForCompletion, false) {
+		current, err = r.waitForRequest(ctx, plan, current)
+		if err != nil {
+			mapApplicationToRequestModel(ctx, current, &state, &response.Diagnostics)
+			response.Diagnostics.Append(response.State.Set(ctx, &state)...)
+			response.Diagnostics.AddError("Application request did not complete", err.Error())
+			return
+		}
 	}
 	if current.Status != "Ready" {
 		response.Diagnostics.AddError(
@@ -357,6 +409,7 @@ func mapApplicationToRequestModel(ctx context.Context, source *azclient.Applicat
 
 func (m applicationRequestResourceModel) toApplicationModel() applicationResourceModel {
 	return applicationResourceModel{
+		PollIntervalSeconds: m.PollIntervalSeconds, CreateTimeoutMinutes: m.CreateTimeoutMinutes,
 		ID: m.ID, DisplayName: m.DisplayName, Description: m.Description, BusinessJustification: m.BusinessJustification,
 		TechnicalRequirements: m.TechnicalRequirements, IntendedAudience: m.IntendedAudience, DataAccessRequirements: m.DataAccessRequirements,
 		ComplianceNotes: m.ComplianceNotes, ExpectedGoLiveDate: m.ExpectedGoLiveDate, ProjectName: m.ProjectName, DepartmentOwner: m.DepartmentOwner,
@@ -373,6 +426,7 @@ func (m applicationRequestResourceModel) toApplicationModel() applicationResourc
 }
 
 func (m *applicationRequestResourceModel) setFromApplicationModel(source applicationResourceModel) {
+	m.PollIntervalSeconds, m.CreateTimeoutMinutes = source.PollIntervalSeconds, source.CreateTimeoutMinutes
 	m.ID, m.DisplayName, m.Description, m.BusinessJustification = source.ID, source.DisplayName, source.Description, source.BusinessJustification
 	m.TechnicalRequirements, m.IntendedAudience = source.TechnicalRequirements, source.IntendedAudience
 	m.DataAccessRequirements, m.ComplianceNotes, m.ExpectedGoLiveDate = source.DataAccessRequirements, source.ComplianceNotes, source.ExpectedGoLiveDate
@@ -388,4 +442,23 @@ func (m *applicationRequestResourceModel) setFromApplicationModel(source applica
 	m.ExposedScopes, m.PreAuthorizedApplications = source.ExposedScopes, source.PreAuthorizedApplications
 	m.Status, m.StatusReason, m.RequestID = source.Status, source.StatusReason, source.RequestID
 	m.ApplicationEntityID, m.ApplicationID, m.ApplicationObjectID = source.ApplicationEntityID, source.ApplicationID, source.ApplicationObjectID
+}
+
+func (m applicationRequestResourceModel) validateWaitSettings() error {
+	if !boolValue(m.WaitForCompletion, false) {
+		return nil
+	}
+	return validateApplicationWaitSettings(modelIntOr(m.PollIntervalSeconds, 5), modelIntOr(m.CreateTimeoutMinutes, 60))
+}
+
+func (r *applicationRequestResource) waitForRequest(ctx context.Context, plan applicationRequestResourceModel, current *azclient.Application) (*azclient.Application, error) {
+	return waitForApplicationRequest(ctx, r.client, current,
+		time.Duration(modelIntOr(plan.PollIntervalSeconds, 5))*time.Second,
+		time.Duration(modelIntOr(plan.CreateTimeoutMinutes, 60))*time.Minute)
+}
+
+func warnApplicationRequestFailure(result *azclient.Application, diagnostics *diag.Diagnostics) {
+	if result.Status == "NeedsAttention" || result.Status == "Rejected" {
+		diagnostics.AddWarning("Application request requires attention", applicationNotReadyMessage(result))
+	}
 }

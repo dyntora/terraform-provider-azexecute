@@ -17,7 +17,10 @@ not ask the caller to weaken tenant governance and does not hold a Terraform
 state lock while waiting for a person.
 
 For new configurations, prefer `azexecute_application_request`. It supports
-both approval and automatic tenants without polling.
+both approval and automatic tenants, returning immediately by default or waiting
+when `wait_for_completion = true`. Optional request waiting requires
+provider 0.12.0 or later. See the
+[resource comparison table](../index.md#choose-a-resource).
 
 ## Example Usage
 

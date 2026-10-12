@@ -270,7 +270,7 @@ func attributeFlags(attribute schema.Attribute) (optional bool, required bool) {
 	}
 }
 
-func TestApplicationRequestStateConversionDropsOnlyWaitSettings(t *testing.T) {
+func TestApplicationRequestStateConversionPreservesWaitSettings(t *testing.T) {
 	t.Parallel()
 	source := applicationResourceModel{
 		ID:                   types.StringValue("11111111-2222-4333-8444-555555555555"),
@@ -289,8 +289,8 @@ func TestApplicationRequestStateConversionDropsOnlyWaitSettings(t *testing.T) {
 		roundTrip.Status != source.Status || roundTrip.ApplicationID != source.ApplicationID {
 		t.Fatalf("request state migration lost managed values: %#v", roundTrip)
 	}
-	if !roundTrip.PollIntervalSeconds.IsNull() || !roundTrip.CreateTimeoutMinutes.IsNull() {
-		t.Fatal("asynchronous request unexpectedly retained synchronous wait settings")
+	if !roundTrip.PollIntervalSeconds.Equal(source.PollIntervalSeconds) || !roundTrip.CreateTimeoutMinutes.Equal(source.CreateTimeoutMinutes) {
+		t.Fatal("request lost wait settings during model conversion")
 	}
 }
 

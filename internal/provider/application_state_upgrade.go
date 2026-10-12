@@ -276,6 +276,7 @@ func (r *applicationRequestResource) UpgradeState(_ context.Context) map[int64]r
 
 func managedApplicationSchemaV1(includeWaitSettings bool) schema.Schema {
 	result := managedApplicationSchema(includeWaitSettings)
+	removeLegacyRequestWaitSettings(&result, includeWaitSettings)
 	result.Version = 1
 	delete(result.Attributes, "app_roles")
 	delete(result.Attributes, "exposed_scopes")
@@ -594,8 +595,17 @@ func upgradeApplicationRequestResourceModelV2(prior applicationRequestResourceMo
 
 func managedApplicationSchemaV2(includeWaitSettings bool) schema.Schema {
 	result := managedApplicationSchema(includeWaitSettings)
+	removeLegacyRequestWaitSettings(&result, includeWaitSettings)
 	result.Version = 2
 	delete(result.Attributes, "exposed_scopes")
 	delete(result.Attributes, "pre_authorized_applications")
 	return result
+}
+
+func removeLegacyRequestWaitSettings(result *schema.Schema, synchronous bool) {
+	if !synchronous {
+		delete(result.Attributes, "wait_for_completion")
+		delete(result.Attributes, "poll_interval_seconds")
+		delete(result.Attributes, "create_timeout_minutes")
+	}
 }

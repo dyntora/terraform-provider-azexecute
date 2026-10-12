@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+- Add optional `wait_for_completion`, `poll_interval_seconds` and `create_timeout_minutes` to `azexecute_application_request`. Waiting preserves request identity and stops on rejection or provisioning failures.
+- Warn on asynchronous request refresh when provisioning needs attention or approval was rejected. The matching API update returns the failed stage, safe Graph explanation and attempt reference in `status_reason`.
+- The matching API/worker update publishes and confirms exposed scopes before pre-authorizing clients, removes obsolete references before scope deletion, and retries scope-propagation failures without deleting the application or pausing provisioning for administrator cleanup. Deploy the server update as well as the provider; previously paused requests still require an explicit retry.
+
 ## 0.11.7
 
 - Update `display_name` and `description` in place on ready applications, preserving request, resource, client and object IDs in both application resources. Removing `description` explicitly clears it.

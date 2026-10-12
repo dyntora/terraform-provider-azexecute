@@ -20,11 +20,24 @@ checked against the current tenant settings.
 
 - Use [`azexecute_event_listener`](resources/event_listener.md) to run an existing automation task when an application event occurs, including protected secret/certificate renewal mappings. Multiple listeners per application are supported.
 
-- Use `azexecute_application_request` for the normal and recommended workflow.
-  It supports both approval-based and automatic tenants and never waits for a
-  human approval while holding the Terraform state lock.
-- Use `azexecute_application` only when the tenant always provisions Terraform
-  applications automatically and a single blocking apply is preferred.
+For new application configurations, use
+[`azexecute_application_request`](resources/application_request.md). Both application
+resources use the same AZExecute request and provisioning flow.
+
+| Behavior | `azexecute_application` | `azexecute_application_request` (recommended) |
+| --- | --- | --- |
+| Automatic provisioning | Supported | Supported |
+| Tenant requires human approval | Refuses creation | Supported |
+| Waits for provisioning | Always | Optional; returns immediately by default |
+| Wait controls | `poll_interval_seconds` and `create_timeout_minutes` | Same controls, enabled by `wait_for_completion = true` |
+| Manages the application after provisioning | Yes | Yes |
+| Waits for downstream API approval or consent | No | No |
+
+Optional request waiting requires provider 0.12.0 or later; it is not
+available in 0.11.7 or earlier. When enabled, waiting includes approval time and
+holds the Terraform state lock. Defaults are a 5-second poll interval and a
+60-minute timeout. Neither resource approves requests or bypasses tenant policy.
+Failures and timeouts retain the request identity.
 
 See the [approval workflow guide](guides/approval-workflows.md) for the complete
 lifecycle and the [getting started guide](guides/getting-started.md) for a
@@ -39,7 +52,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.11"
+      version = "~> 0.12"
     }
   }
 }

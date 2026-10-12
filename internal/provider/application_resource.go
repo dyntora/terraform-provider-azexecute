@@ -202,14 +202,14 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 		},
 	}
 	if !includeWaitSettings {
-		delete(result.Attributes, "poll_interval_seconds")
-		delete(result.Attributes, "create_timeout_minutes")
+		result.Attributes["wait_for_completion"] = schema.BoolAttribute{Optional: true, Description: "Wait during create/update for approval and provisioning to reach Ready. Defaults to false. Does not grant approval or wait for downstream API consent."}
 	}
 	return result
 }
 
 func managedApplicationSchemaV0(includeWaitSettings bool) schema.Schema {
 	result := managedApplicationSchema(includeWaitSettings)
+	removeLegacyRequestWaitSettings(&result, includeWaitSettings)
 	result.Version = 0
 	delete(result.Attributes, "owner_object_ids")
 	result.Attributes["application_entity_id"] = schema.Int64Attribute{Computed: true, Description: "AZExecute application entity identifier."}

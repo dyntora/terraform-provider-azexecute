@@ -1,7 +1,7 @@
 ---
 page_title: "azexecute_application_request Resource"
 description: |-
-  Submits and tracks a governed application request without waiting for approval.
+  Submits and tracks a governed application request, with optional waiting for completion.
 ---
 
 # azexecute_application_request
@@ -14,9 +14,38 @@ modes:
 - an automatic tenant returns `Provisioning` or `Ready`.
 
 Create submits the request after checking API capabilities; read retrieves its
-status. Neither waits for human approval. AZExecute applies requested registration
+status. By default neither waits for human approval. AZExecute applies requested registration
 settings during approved provisioning before reporting `Ready`. Refresh Terraform
 after approval to record the generated Entra identifiers.
+
+See the [resource comparison table](../index.md#choose-a-resource) for how this
+differs from `azexecute_application`.
+
+Optional request waiting requires provider 0.12.0 or later; it is not
+available in 0.11.7 or earlier. Set `wait_for_completion = true` to keep create/update running until the application
+is `Ready`. This can also wait for a human approval; it does not approve the request.
+Polling defaults to every 5 seconds with a 60-minute deadline:
+
+```terraform
+resource "azexecute_application_request" "api" {
+  display_name           = "example-api"
+  wait_for_completion    = true
+  poll_interval_seconds  = 5
+  create_timeout_minutes = 60
+}
+```
+
+`poll_interval_seconds` accepts 1–300 and `create_timeout_minutes` accepts 1–1440.
+These settings control waiting during create/update, not refresh. `Ready` means
+application provisioning completed; downstream API approval/consent remains separate.
+`NeedsAttention` and `Rejected` stop waiting immediately and report `status_reason`.
+Timeouts and failures retain the request identity in state. Without waiting, a later
+refresh/plan reports a warning when a background request needs attention. An already
+finished Terraform command cannot receive a later background failure.
+
+The matching API update includes the failed request stage, safe Graph explanation
+and attempt reference in `status_reason`, even after automatic cleanup. Existing
+historical generic errors cannot be reconstructed from the stored request alone.
 
 ## Example Usage
 
@@ -163,17 +192,33 @@ and the [approval workflow guide](../guides/approval-workflows.md).
 
 ## Lifecycle
 
+With the default `wait_for_completion = false`:
+
 - `PendingApproval` is a successful apply. An administrator must review the
   request in AZExecute.
 - `Provisioning` is a successful apply. AZExecute background work is still
   running.
 - `Ready` means the application identifiers are available.
 - `Rejected` is retained in state, including `status_reason` when available.
+- `NeedsAttention` is retained in state and reports the provisioning failure.
+
+With `wait_for_completion = true`, pending approval and provisioning keep apply
+running until `Ready` or the timeout. Rejection and `NeedsAttention` return an
+error immediately. Waiting holds the Terraform state lock and never grants approval.
 
 Terraform never approves a request. See the
 [approval workflow guide](../guides/approval-workflows.md).
 
 ## Schema
+
+### Optional Waiting (Provider 0.12.0+)
+
+- `wait_for_completion` (Boolean): wait during create/update for approval and
+  provisioning to reach `Ready`; defaults to `false`.
+- `poll_interval_seconds` (Number): polling interval when waiting is enabled;
+  `1`–`300`, default `5`.
+- `create_timeout_minutes` (Number): maximum wait during create/update, including
+  approval time; `1`–`1440`, default `60`.
 
 ### Required
 

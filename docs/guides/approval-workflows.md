@@ -11,6 +11,10 @@ AZExecute tenants independently control application approval and API-permission
 approval. The recommended `azexecute_application_request` resource works in all
 combinations without weakening tenant governance.
 
+See the [resource comparison table](../index.md#choose-a-resource) to choose
+between the two application resources. The flows below describe the request
+resource's default asynchronous behavior.
+
 ## Application Approval Enabled
 
 1. Terraform validates the live tenant policy during planning.
@@ -36,7 +40,22 @@ immediately. It can return:
 - `Provisioning` when background work is still running.
 
 If it returns `Provisioning`, run Terraform again after the background workflow
-finishes. The asynchronous resource does not poll while holding state.
+finishes, or enable optional waiting to keep apply running until `Ready`.
+
+## Optional Request Waiting
+
+Provider 0.12.0 adds `wait_for_completion = true` to
+`azexecute_application_request`; this option is not available in 0.11.7 or earlier.
+It waits during create/update for approval and provisioning, holding the Terraform
+state lock. It never grants approval or waits for downstream API consent.
+
+- `poll_interval_seconds`: `1`–`300`, default `5`;
+- `create_timeout_minutes`: `1`–`1440`, default `60`, including approval time.
+
+`Ready` completes the wait. `NeedsAttention` and `Rejected` stop it with an error
+containing `status_reason`. Failures and timeouts retain the request identity.
+With waiting disabled, a later refresh reports a warning for these failed outcomes.
+An already finished Terraform command cannot receive a later background failure.
 
 ## Status Values
 
@@ -44,6 +63,8 @@ finishes. The asynchronous resource does not poll while holding state.
 - `Provisioning` — AZExecute accepted the request and background creation is in
   progress.
 - `Ready` — the application is provisioned and its identifiers are available.
+- `NeedsAttention` — provisioning is paused for recovery. Review `status_reason`
+  and the request flow; Terraform does not automatically resume the request.
 - `Rejected` — an administrator rejected the request. `status_reason` may
   explain why.
 

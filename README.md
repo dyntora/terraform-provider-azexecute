@@ -65,7 +65,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.11"
+      version = "~> 0.12"
     }
   }
 }
@@ -84,15 +84,32 @@ output "status" {
 ```
 
 The recommended `azexecute_application_request` resource works with approval
-and automatic tenants. `PendingApproval` and `Provisioning` are successful
+and automatic tenants. With waiting disabled, `PendingApproval` and `Provisioning` are successful
 results: approve or wait for provisioning, then refresh Terraform to read the
 resulting identifiers. Creation-time registration settings are stored with the
 request and applied by the API after approval, before `Ready`. This requires an
 API advertising `supports_registration_requests`; older provider clients remain
 supported by API v1.
 
-Use `azexecute_application` only when the tenant guarantees automatic
-provisioning and Terraform should wait for completion in one apply.
+### Which application resource should I use?
+
+Both resources use the same AZExecute request and provisioning flow.
+
+| Behavior | `azexecute_application` | `azexecute_application_request` (recommended) |
+| --- | --- | --- |
+| Automatic provisioning | Supported | Supported |
+| Tenant requires human approval | Refuses creation | Supported |
+| Waits for provisioning | Always | Optional; returns immediately by default |
+| Wait controls | `poll_interval_seconds` and `create_timeout_minutes` | Same controls, enabled by `wait_for_completion = true` |
+| Manages the application after provisioning | Yes | Yes |
+| Waits for downstream API approval or consent | No | No |
+
+Optional request waiting requires provider 0.12.0 or later; it is not
+available in 0.11.7 or earlier. Waiting defaults to polling every 5 seconds for up
+to 60 minutes, includes human approval time and holds the Terraform state lock.
+Neither resource approves requests or bypasses tenant policy. Failures and
+timeouts retain the request identity. See the
+[request reference](docs/resources/application_request.md) for configuration.
 
 ## Tenant Prerequisites
 

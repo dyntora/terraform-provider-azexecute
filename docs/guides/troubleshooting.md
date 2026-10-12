@@ -139,7 +139,7 @@ terraform providers
 terraform init -upgrade
 ```
 
-Verify the configuration requires `dyntora/azexecute` `~> 0.11` and inspect
+Verify the configuration requires `dyntora/azexecute` `~> 0.12` and inspect
 `.terraform.lock.hcl`. CI/CD caches and mirrors must also contain the selected
 release. Provider `0.5.0` is the first release containing the complete Registry
 reference and the approval-aware resource documentation in the same tag.
@@ -190,6 +190,20 @@ background provisioning, run Terraform again.
 Check the request and background operation in AZExecute. Do not repeatedly
 remove state or change the resource UUID: create is idempotent and a later run
 will refresh the same request.
+
+## Pre-Authorized Scope IDs Cannot Be Found
+
+`pre_authorized_applications.delegated_permission_ids` must reference this API's
+`exposed_scopes.id` values. These are not downstream permission IDs such as
+Microsoft Graph `User.Read`. Invalid references fail configuration validation.
+
+Correct references can also fail if Entra has not yet made newly published scopes
+available for pre-authorization. The API/worker update accompanying provider
+`0.12.0` separates and confirms these writes, then retries the specific propagation
+failure while retaining the application. Upgrading only Terraform does not install
+that server fix. Check the request flow and `status_reason` for the failed stage,
+safe Graph explanation and attempt reference. An administrator must explicitly
+retry requests already paused by an older server version after the server update.
 
 ## Status Is Rejected
 
