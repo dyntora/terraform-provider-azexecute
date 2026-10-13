@@ -411,7 +411,7 @@ func (r *applicationResource) Delete(ctx context.Context, request resource.Delet
 		return
 	}
 	err := r.client.DeleteApplication(ctx, state.ID.ValueString())
-	if err != nil && !azclient.IsNotFound(err) {
+	if err != nil && !azclient.IsDeleteNotFound(err) {
 		response.Diagnostics.AddError("Unable to delete AZExecute application", err.Error())
 	}
 }

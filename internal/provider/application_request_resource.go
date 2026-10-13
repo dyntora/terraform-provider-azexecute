@@ -303,7 +303,7 @@ func (r *applicationRequestResource) Delete(ctx context.Context, request resourc
 	if response.Diagnostics.HasError() || r.client == nil {
 		return
 	}
-	if err := r.client.DeleteApplication(ctx, state.ID.ValueString()); err != nil && !azclient.IsNotFound(err) {
+	if err := r.client.DeleteApplication(ctx, state.ID.ValueString()); err != nil && !azclient.IsDeleteNotFound(err) {
 		response.Diagnostics.AddError("Unable to delete AZExecute application request", err.Error())
 	}
 }

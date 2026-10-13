@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1
+
+- Preserve both application resources in Terraform state when Microsoft Graph reports a dependency 404 during refresh or destroy. Only an AZExecute resource-not-found response means the resource is absent.
+- The matching server update confirms Entra application and service-principal deletion before retiring requests, serializes destroy with provisioning, retains checkpoints after failures, and supports retrying partial deletion.
+- Recover incorrectly retired requests and missing local application records without reporting live Entra objects as deleted. Tenant administrators can use **Clean up and retire** for verified orphaned requests; replacement creation keeps the name reserved while cleanup is required.
+- Deploy the matching server update as well as provider 0.12.1. Normal Entra soft deletion remains unchanged; destroy does not permanently purge deleted items.
+
 ## 0.12.0
 
 - Add optional `wait_for_completion`, `poll_interval_seconds` and `create_timeout_minutes` to `azexecute_application_request`. Waiting preserves request identity and stops on rejection or provisioning failures.

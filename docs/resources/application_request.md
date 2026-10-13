@@ -507,6 +507,26 @@ Destroy cancels a pending or rejected request without requiring application
 deletion. Destroying a provisioned or automatically provisioning application
 requires **Allow Application Deletion** in the tenant Terraform settings.
 
+Provider **0.12.1** and its matching server update retain Terraform state on
+directory failures and confirm deletion before retiring the request. Destroy
+uses the same lease as provisioning; if creation is running, wait and retry.
+After a timeout, permission error, or directory-propagation conflict, restore
+access if needed and run `terraform destroy` again. The request and resource
+references remain available for cleanup.
+
+A missing local application record is not proof of Entra deletion. Refresh
+checks Entra and reports `NeedsAttention` for live orphaned resources, including
+requests incorrectly retired by older versions. Retry destroy, or have a tenant
+administrator open the request history and choose **Clean up and retire**.
+Managed applications remain subject to application access checks; shared or
+unverifiable resources require administrator review. If Terraform has already
+forgotten a resource, import its original AZExecute resource UUID before retrying
+destroy. Do not substitute the Entra client ID or object ID.
+
+Destroy uses Entra's normal soft deletion and does not permanently purge
+`deletedItems`. Immediate reuse of a retained identifier URI is not guaranteed.
+Deleting the Terraform state entry alone never performs directory cleanup.
+
 ## Move from azexecute_application
 
 Provider `0.5` supports a state-preserving cross-resource move:

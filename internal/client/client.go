@@ -31,6 +31,7 @@ type APIError struct {
 	Detail     string              `json:"detail"`
 	TraceID    string              `json:"traceId"`
 	Code       string              `json:"code"`
+	Service    string              `json:"service"`
 	Errors     map[string][]string `json:"errors"`
 }
 
@@ -68,7 +69,16 @@ func (e *APIError) Error() string {
 
 func IsNotFound(err error) bool {
 	var apiErr *APIError
-	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound &&
+		apiErr.Service == "" && (apiErr.Code == "" || apiErr.Code == "terraform_resource_not_found")
+}
+
+// DELETE returns 204 when a resource is already absent. A bare 404 can come
+// from routing or an upstream service; it is not evidence of completed cleanup.
+func IsDeleteNotFound(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound &&
+		apiErr.Service == "" && apiErr.Code == "terraform_resource_not_found"
 }
 
 func New(endpoint, scope, staticToken string, credential azcore.TokenCredential, timeout time.Duration) (*Client, error) {
