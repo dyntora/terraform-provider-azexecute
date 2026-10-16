@@ -3,6 +3,7 @@ package client
 import "time"
 
 type Capabilities struct {
+	PreservesHiddenMetadata           bool     `json:"preservesHiddenMetadata"`
 	SupportsApplicationDetailsUpdates bool     `json:"supportsApplicationDetailsUpdates"`
 	MinimumAdditionalOwners           int64    `json:"minimumAdditionalOwners"`
 	SupportsRegistrationRequests      bool     `json:"supportsRegistrationRequests"`
@@ -86,6 +87,7 @@ type PermissionRequestStatus struct {
 }
 
 type Application struct {
+	RequestedAPIPermissions  []APIPermissionRequest     `json:"requestedApiPermissions"`
 	RequestedRegistration    *RegistrationConfiguration `json:"requestedRegistration,omitempty"`
 	ResourceID               string                     `json:"resourceId"`
 	RequestID                int64                      `json:"requestId"`

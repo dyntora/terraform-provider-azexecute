@@ -96,19 +96,34 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build provider: %v\n%s", err, output)
 	}
-	for _, resourceType := range []string{"azexecute_application_request", "azexecute_application"} {
-		t.Run(resourceType, func(t *testing.T) {
+	for _, scenario := range []struct {
+		name, resourceType string
+		waitLater          bool
+	}{
+		{"request", "azexecute_application_request", false},
+		{"application", "azexecute_application", false},
+		{"request_wait_later", "azexecute_application_request", true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			resourceType := scenario.resourceType
+			waitEnabled := !scenario.waitLater
 			var mu sync.Mutex
 			clientID, objectID := "11111111-2222-4333-8444-555555555555", "22222222-2222-4333-8444-555555555555"
 			app := azclient.Application{}
+			completeOnRead := false
+			readsBeforeCompletion := 0
 			creates, deletes, updates := 0, 0, 0
 			supportsUpdates := true
+			preservesMetadata := true
+			discardMetadata := false
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				defer mu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/api/terraform/v1/capabilities" {
-					_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, SupportsApplicationDetailsUpdates: supportsUpdates})
+					_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, AllowApplicationDeletion: true,
+						SupportsRegistrationRequests: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
+						RequiredMetadataFields: []string{"business_justification"}, SupportsApplicationDetailsUpdates: supportsUpdates, PreservesHiddenMetadata: preservesMetadata, IncludedMetadataFields: []string{}})
 					return
 				}
 				switch r.Method {
@@ -119,7 +134,16 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 						t.Error(err)
 					}
 					app = azclient.Application{ResourceID: create.ResourceID, DisplayName: create.DisplayName, Description: create.Description,
-						Metadata: create.Metadata, Status: "Ready", RequestID: 42, ApplicationID: &clientID, ApplicationObjectID: &objectID}
+						Metadata: create.Metadata, Status: "Provisioning", RequestID: 42, RequestedRegistration: create.Registration}
+					app.OwnerObjectIDs = *create.OwnerObjectIDs
+					app.RequestedAPIPermissions = create.APIPermissionRequests
+					for i := range app.OwnerObjectIDs {
+						app.OwnerObjectIDs[i] = strings.ToLower(app.OwnerObjectIDs[i])
+					}
+					if resourceType == "azexecute_application_request" {
+						app.Status = "PendingApproval"
+					}
+					completeOnRead = true
 				case "PUT":
 					updates++
 					var update azclient.ApplicationUpdate
@@ -127,6 +151,16 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 						t.Error(err)
 					}
 					app.Metadata = update.Metadata
+					if update.OwnerObjectIDs != nil {
+						app.OwnerObjectIDs = *update.OwnerObjectIDs
+					}
+					if update.Registration != nil {
+						app.Registration = update.Registration
+					}
+					if discardMetadata {
+						app.Metadata.RequiresElevatedPermissions = false
+						app.Metadata.ElevatedPermissionsJustification = nil
+					}
 					if update.Details != nil {
 						if update.Details.DisplayName != nil {
 							app.DisplayName = *update.Details.DisplayName
@@ -140,10 +174,39 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 					}
 				case "DELETE":
 					deletes++
-					t.Error("metadata edit deleted the application")
+					app = azclient.Application{}
+					w.WriteHeader(http.StatusNoContent)
+					return
 				case "GET":
+					if app.ResourceID == "" {
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprint(w, `{"code":"terraform_resource_not_found"}`)
+						return
+					}
+					if completeOnRead {
+						if readsBeforeCompletion > 0 {
+							readsBeforeCompletion--
+						}
+					}
+					if completeOnRead && readsBeforeCompletion == 0 {
+						completeOnRead = false
+						app.Status, app.ApplicationID, app.ApplicationObjectID = "Ready", &clientID, &objectID
+						registration := *app.RequestedRegistration
+						app.Registration = &registration
+						app.Registration.ApplicationID = clientID
+						// Match ApplicationRegistrationRequest.ResolveIdentifiers on the API:
+						// exposed scopes receive a generated identifier when none was supplied.
+						if len(app.Registration.IdentifierUris) == 0 && len(app.Registration.API.Scopes) > 0 {
+							app.Registration.IdentifierUris = []azclient.URIValue{{Value: "api://" + clientID}}
+						}
+					}
 				default:
 					t.Errorf("unexpected method: %s", r.Method)
+				}
+				app.DisplayName = strings.TrimSpace(app.DisplayName)
+				app.Metadata.BusinessJustification = strings.TrimSpace(app.Metadata.BusinessJustification)
+				if app.Registration != nil {
+					app.Registration.Web.HomePageURL, app.Registration.Web.LogoutURL = nil, nil
 				}
 				_ = json.NewEncoder(w).Encode(app)
 			}))
@@ -170,6 +233,10 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				return output
 			}
 			config := func(name, metadata string) {
+				wait := ""
+				if resourceType == "azexecute_application_request" {
+					wait = fmt.Sprintf("wait_for_completion = %t", waitEnabled)
+				}
 				write("main.tf", fmt.Sprintf(`terraform {
   required_providers {
     azexecute = { source = "dyntora/azexecute" }
@@ -179,17 +246,76 @@ provider "azexecute" {
   endpoint = %q
   access_token = "local-test-token"
 }
+resource "terraform_data" "metadata" {
+  input = "  Test metadata updates  "
+}
 resource %q "test" {
   display_name = %q
-  business_justification = "Test metadata updates"
+  business_justification = terraform_data.metadata.output
+  contact_phone = ""
+  %s
+  poll_interval_seconds = 1
+  configure_registration = true
+  sign_in_audience = "AzureADMyOrg"
+  owner_object_ids = ["AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"]
+  web_home_page_url = ""
+  web_logout_url = ""
+  web_redirect_uris = ["https://example.com/callback"]
+  app_roles = [{
+    id = "AAAAAAAA-1111-4222-8333-EEEEEEEEEEEE"
+    display_name = "Read"
+    value = "Read.All"
+    description = "Read application data"
+    is_enabled = true
+    allow_users_and_groups = false
+    allow_applications = true
+  }]
+  exposed_scopes = [{
+    id = "AAAAAAAA-2222-4333-8444-EEEEEEEEEEEE"
+    value = "access_as_user"
+    admin_consent_display_name = "Access application"
+    admin_consent_description = "Access this API on behalf of a user"
+    consent_type = "Admin"
+    is_enabled = true
+  }]
+  pre_authorized_applications = [{
+    application_id = "AAAAAAAA-3333-4444-8555-EEEEEEEEEEEE"
+    delegated_permission_ids = ["AAAAAAAA-2222-4333-8444-EEEEEEEEEEEE"]
+  }]
+  api_permission_request {
+    target_type = "ExternalApi"
+    target_external_api_app_id = "00000003-0000-0000-c000-000000000000"
+    grant_type = "AppRole"
+    permission {
+      id = "df021288-bdef-4463-88db-98f22de89214"
+      requires_admin_consent = true
+    }
+  }
+  requires_elevated_permissions = true
+  elevated_permissions_justification = "Read employee profiles for roster eligibility."
   %s
 }
-`, server.URL, resourceType, name, metadata))
+`, server.URL, resourceType, name, wait, metadata))
 			}
-			config("Original", `description = "Original description"`)
+			config(" Original ", `description = "Original description"`)
 			run("apply", "-auto-approve", "-input=false", "-no-color")
+			if scenario.waitLater {
+				mu.Lock()
+				if app.Status != "PendingApproval" || app.ApplicationID != nil {
+					t.Error("asynchronous creation did not retain pending request")
+				}
+				readsBeforeCompletion = 3 // refresh, update preflight, then the wait completes
+				mu.Unlock()
+				waitEnabled = true
+				config(" Original ", `description = "Original description"`)
+				run("apply", "-auto-approve", "-input=false", "-no-color")
+				run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			}
 			mu.Lock()
 			originalID := app.ResourceID
+			if len(app.Registration.IdentifierUris) != 1 || app.Registration.IdentifierUris[0].Value != "api://"+clientID {
+				t.Error("waiting erased the API-generated identifier URI")
+			}
 			mu.Unlock()
 			for _, edit := range []struct{ name, metadata string }{
 				{"Original", `description = "New description"`},
@@ -204,14 +330,17 @@ resource %q "test" {
 				output := run("show", "-json", "update.tfplan")
 				var plan struct {
 					ResourceChanges []struct {
-						Change struct{ Actions []string } `json:"change"`
+						Address string                     `json:"address"`
+						Change  struct{ Actions []string } `json:"change"`
 					} `json:"resource_changes"`
 				}
 				if err := json.Unmarshal(output, &plan); err != nil {
 					t.Fatalf("plan JSON: %v\n%s", err, output)
 				}
-				if len(plan.ResourceChanges) != 1 || !reflect.DeepEqual(plan.ResourceChanges[0].Change.Actions, []string{"update"}) {
-					t.Fatalf("expected in-place update: %s", output)
+				for _, change := range plan.ResourceChanges {
+					if change.Address == resourceType+".test" && !reflect.DeepEqual(change.Change.Actions, []string{"update"}) {
+						t.Fatalf("expected in-place update: %s", output)
+					}
 				}
 				run("apply", "-auto-approve", "-input=false", "-no-color", "update.tfplan")
 				run("plan", "-detailed-exitcode", "-input=false", "-no-color") // exit 0 = clean
@@ -221,7 +350,42 @@ resource %q "test" {
 				}
 				mu.Unlock()
 			}
+			// Reproduce the old API's erased metadata, then repair the same application.
 			mu.Lock()
+			app.Registration.AppRoles[0].Value = "Unexpected.Role"
+			app.OwnerObjectIDs = []string{}
+			mu.Unlock()
+			run("apply", "-auto-approve", "-input=false", "-no-color")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if app.Registration.AppRoles[0].Value != "Read.All" || len(app.OwnerObjectIDs) != 1 {
+				t.Error("owner/registration drift was not repaired")
+			}
+			app.Metadata.RequiresElevatedPermissions = false
+			app.Metadata.ElevatedPermissionsJustification = nil
+			discardMetadata = true
+			mu.Unlock()
+			failedOutput, failedErr := command("apply", "-auto-approve", "-input=false", "-no-color")
+			if failedErr == nil || !strings.Contains(string(failedOutput), "AZExecute did not retain the requested metadata") || strings.Contains(string(failedOutput), "Provider produced inconsistent result") {
+				t.Fatalf("missing useful metadata diagnostic: %v\n%s", failedErr, failedOutput)
+			}
+			mu.Lock()
+			discardMetadata = false
+			mu.Unlock()
+			run("apply", "-auto-approve", "-input=false", "-no-color")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if !app.Metadata.RequiresElevatedPermissions || app.Metadata.ElevatedPermissionsJustification == nil || app.ResourceID != originalID || *app.ApplicationID != clientID || *app.ApplicationObjectID != objectID || creates != 1 || deletes != 0 {
+				t.Error("metadata repair lost values or replaced the application")
+			}
+			preservesMetadata = false
+			mu.Unlock()
+			legacyOutput, legacyErr := command("plan", "-input=false", "-no-color")
+			if legacyErr == nil || !strings.Contains(string(legacyOutput), "Upgrade AZExecute") {
+				t.Fatalf("legacy metadata loss not blocked during planning: %v\n%s", legacyErr, legacyOutput)
+			}
+			mu.Lock()
+			preservesMetadata = true
 			supportsUpdates = false
 			mu.Unlock()
 			config("Renamed", `description = "Unsupported update"`)
@@ -232,9 +396,29 @@ resource %q "test" {
 			mu.Lock()
 			totalUpdates := updates
 			mu.Unlock()
-			if totalUpdates != 6 {
+			if totalUpdates != 10 { // initial reconciliation, edits, ownership/role drift, metadata recovery
 				t.Fatalf("unexpected update count: %d", totalUpdates)
 			}
+			mu.Lock()
+			supportsUpdates = true
+			mu.Unlock()
+			config("Renamed", "project_name = \"Project\"\n department_owner = \"Engineering\"")
+			run("state", "rm", resourceType+".test")
+			run("import", "-input=false", "-no-color", resourceType+".test", originalID)
+			run("apply", "-auto-approve", "-input=false", "-no-color")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if creates != 1 || deletes != 0 || app.ResourceID != originalID {
+				t.Error("import replaced application")
+			}
+			mu.Unlock()
+			run("destroy", "-auto-approve", "-input=false", "-no-color")
+			run("destroy", "-auto-approve", "-input=false", "-no-color")
+			mu.Lock()
+			if deletes != 1 {
+				t.Errorf("expected exactly one delete, got %d", deletes)
+			}
+			mu.Unlock()
 		})
 	}
 }

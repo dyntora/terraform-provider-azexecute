@@ -49,6 +49,26 @@ historical generic errors cannot be reconstructed from the stored request alone.
 
 ## Example Usage
 
+### Metadata updates and recovery
+
+On current AZExecute APIs, metadata visibility settings control the request forms;
+valid Terraform metadata is retained even when its form fields are hidden. Required
+fields and value validation still apply. Older APIs that discard hidden elevated
+metadata are rejected before writing, with instructions to upgrade AZExecute or
+enable the corresponding metadata controls.
+
+For a `Ready` application, changing metadata updates the existing application in
+place. Refresh and apply to correct drift; metadata does not require replacement.
+If an earlier failed create left the resource tainted or absent from state, review
+the plan and reconcile/import its existing Terraform resource UUID before applying
+to keep the application. A generic failed apply does not mean Azure creation failed.
+
+Terraform can withdraw requests and delete the applications it manages, subject to
+tenant policy and access checks. Remove the resource from configuration and apply,
+or use `terraform destroy` for the intended scope. Deletion cleans up resources and
+retires the request, preserving history. Pending approvals and paused provisioning
+still follow their approval/recovery workflow; metadata updates cannot bypass it.
+
 ### Request app roles and delegated scopes together
 
 Both `app_roles` and `exposed_scopes` belong to the application being requested.
@@ -500,6 +520,14 @@ terraform import azexecute_application_request.example 11111111-2222-4333-8444-5
 Do not use an Entra client ID, Entra object ID, numeric request ID, or numeric
 application entity ID. After import, run `terraform plan` and align the
 configuration with the imported state.
+
+Provider 0.12.2 requires an API that returns `requestedApiPermissions`
+when importing. It restores the original permission-request blocks so recovering
+state does not omit them and unexpectedly plan a replacement. Deploy the matching
+API before upgrading the provider. Import recovers existing AZExecute Terraform
+resources; it does not adopt arbitrary Entra registrations. Review the plan after
+import, including UUID spelling in permission blocks. Submitted permissions are
+not evidence that consent has been granted.
 
 ## Destroy
 

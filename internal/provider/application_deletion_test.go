@@ -27,14 +27,17 @@ func TestApplicationDeletionAndRefreshPreserveGraphFailures(t *testing.T) {
 				{"graph404WithoutCode", 404, `{"service":"Microsoft Graph"}`, true},
 				{"oldGraph404", 404, `{"code":"Request_ResourceNotFound"}`, true},
 				{"absent", 404, `{"code":"terraform_resource_not_found"}`, false},
-				{"legacyAbsent", 404, ``, false},
+				{"unqualified404", 404, ``, true},
+				{"emptySuccess", 200, `{}`, true},
+				{"wrongResource", 200, `{"resourceId":"different","status":"Ready"}`, true},
+				{"unconfirmedCleanup", 202, `{}`, true},
 				{"confirmedDeletion", 204, ``, false},
 				{"denied", 403, `{"code":"access_denied"}`, true},
 				{"propagating", 409, `{"code":"cleanup_pending"}`, true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					if read && tc.status == 204 {
-						return
+						tc.wantError = true
 					}
 					ctx := context.Background()
 					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -72,7 +75,7 @@ func TestApplicationDeletionAndRefreshPreserveGraphFailures(t *testing.T) {
 						} else {
 							(&applicationRequestResource{client: api}).Delete(ctx, resource.DeleteRequest{State: state}, &response)
 						}
-						if response.Diagnostics.HasError() != (tc.wantError || tc.name == "legacyAbsent") {
+						if response.Diagnostics.HasError() != tc.wantError {
 							t.Fatalf("delete: %v", response.Diagnostics)
 						}
 					}

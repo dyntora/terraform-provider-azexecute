@@ -205,7 +205,8 @@ func identifiersWithTemplates(desired types.Set, actual []string, id string) []s
 	if !setIsConfigured(desired) || id == "" {
 		return actual
 	}
-	result := append([]string(nil), actual...)
+	result := make([]string, len(actual))
+	copy(result, actual)
 	for _, v := range desired.Elements() {
 		s, ok := v.(types.String)
 		if !ok {

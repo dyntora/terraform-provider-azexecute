@@ -6,7 +6,7 @@ It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
 
-Provider `0.10` supports:
+The provider supports:
 
 - approval-aware asynchronous application requests;
 - synchronous application creation for automatic tenants;
@@ -52,6 +52,7 @@ The complete Registry-facing documentation is maintained with the provider:
 - [`azexecute_application` data source](docs/data-sources/application.md)
 - [Upgrade and state migration](docs/guides/migration-v0.5.md)
 - [Troubleshooting](docs/guides/troubleshooting.md)
+- [Application deployment validation and release checks](docs/guides/application-deployment-validation.md)
 
 After publication, the same reference is available at the
 [Terraform Registry](https://registry.terraform.io/providers/dyntora/azexecute/latest/docs).

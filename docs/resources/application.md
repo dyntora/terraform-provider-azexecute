@@ -355,6 +355,14 @@ Do not use an Entra client ID, Entra object ID, numeric request ID, or numeric
 application entity ID. After import, run `terraform plan` and align the
 configuration with the imported state.
 
+Import with provider 0.12.2 requires the matching API's
+`requestedApiPermissions` response. The original API-permission request blocks
+are restored so recovery does not accidentally omit them and plan replacement.
+An older API returns upgrade guidance. Import recovers an existing AZExecute
+Terraform resource; it does not adopt an arbitrary Entra registration. Review
+the resulting plan, including UUID spelling in permission blocks. The original
+submission is not evidence that downstream consent has been granted.
+
 ## Destroy
 
 Destroying a provisioned or automatically provisioning application requires

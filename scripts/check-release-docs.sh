@@ -33,6 +33,7 @@ required_files=(
   docs/guides/approval-workflows.md
   docs/guides/migration-v0.5.md
   docs/guides/troubleshooting.md
+  docs/guides/application-deployment-validation.md
   examples/authentication/azure-devops.yml
   examples/authentication/github-actions.yml
   examples/migration/moved.tf
@@ -80,6 +81,7 @@ resource_fields=(
 )
 
 capability_fields=(
+  preserves_hidden_metadata
   supports_application_details_updates
   minimum_additional_owners
   id api_version supports_registration_requests enabled allow_application_creation allow_application_deletion

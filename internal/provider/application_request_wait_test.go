@@ -158,7 +158,7 @@ func TestEnablingWaitPlansGeneratedIdentifiersAsUnknown(t *testing.T) {
 		t.Fatal(d)
 	}
 	response := resource.ModifyPlanResponse{Plan: plan}
-	(&applicationRequestResource{client: api}).ModifyPlan(ctx, resource.ModifyPlanRequest{Plan: plan, State: state}, &response)
+	(&applicationRequestResource{client: api}).ModifyPlan(ctx, resource.ModifyPlanRequest{Plan: plan, State: state, Config: tfsdk.Config{Schema: s, Raw: plan.Raw}}, &response)
 	if response.Diagnostics.HasError() {
 		t.Fatal(response.Diagnostics)
 	}
@@ -170,6 +170,24 @@ func TestEnablingWaitPlansGeneratedIdentifiersAsUnknown(t *testing.T) {
 		if !value.IsUnknown() {
 			t.Fatalf("%s incorrectly fixed to old value", name)
 		}
+	}
+	var identifiers types.Set
+	if d := response.Plan.GetAttribute(ctx, path.Root("identifier_uris"), &identifiers); d.HasError() {
+		t.Fatal(d)
+	}
+	if !identifiers.IsUnknown() {
+		t.Fatal("unconfigured registration must be resolved after approval")
+	}
+	configured := applicationResourceModel{IdentifierURIs: stringSet(t, "api://explicit")}
+	if d := response.Plan.SetAttribute(ctx, path.Root("identifier_uris"), configured.IdentifierURIs); d.HasError() {
+		t.Fatal(d)
+	}
+	planPendingRegistration(ctx, configured, &response)
+	if d := response.Plan.GetAttribute(ctx, path.Root("identifier_uris"), &identifiers); d.HasError() {
+		t.Fatal(d)
+	}
+	if !identifiers.Equal(configured.IdentifierURIs) {
+		t.Fatal("explicit registration configuration must remain authoritative")
 	}
 }
 

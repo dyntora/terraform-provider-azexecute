@@ -1,0 +1,83 @@
+{
+  "resourceId": "11111111-2222-4333-8444-555555555555",
+  "requestId": 42,
+  "status": "Ready",
+  "statusReason": "Application created",
+  "applicationEntityId": "22222222-2222-4333-8444-555555555555",
+  "applicationId": "33333333-2222-4333-8444-555555555555",
+  "applicationObjectId": "44444444-2222-4333-8444-555555555555",
+  "displayName": "Contract test API",
+  "description": "Wire contract fixture",
+  "ownerObjectIds": ["55555555-2222-4333-8444-555555555555"],
+  "automationOwnerObjectIds": ["66666666-2222-4333-8444-555555555555"],
+  "metadata": {
+    "businessJustification": "Serve the application integration",
+    "technicalRequirements": "HTTPS",
+    "intendedAudience": "Employees",
+    "dataAccessRequirements": "Approved profiles",
+    "complianceNotes": "Audited",
+    "expectedGoLiveDate": "2026-11-01T00:00:00Z",
+    "projectName": "Platform",
+    "departmentOwner": "Engineering",
+    "businessCriticality": 4,
+    "requiresElevatedPermissions": true,
+    "elevatedPermissionsJustification": "Approved directory reads",
+    "environment": "Test",
+    "contactEmail": "owner@example.com",
+    "contactPhone": "+4512345678"
+  },
+  "registration": {
+    "applicationId": "33333333-2222-4333-8444-555555555555",
+    "applicationObjectId": "44444444-2222-4333-8444-555555555555",
+    "displayName": "Contract test API",
+    "signInAudience": "AzureADMyOrg",
+    "isFallbackPublicClient": true,
+    "canEdit": true,
+    "concurrencyToken": "fixture-version",
+    "identifierUris": [{"value": "api://33333333-2222-4333-8444-555555555555"}],
+    "web": {
+      "homePageUrl": "https://example.com/",
+      "logoutUrl": "https://example.com/logout",
+      "enableAccessTokenIssuance": true,
+      "enableIdTokenIssuance": true,
+      "redirectUris": [{"value": "https://example.com/callback"}]
+    },
+    "spa": {"redirectUris": []},
+    "publicClient": {"redirectUris": []},
+    "appRoles": [{
+      "id": "77777777-2222-4333-8444-555555555555",
+      "displayName": "Read", "value": "Read.All", "description": "Read data",
+      "isEnabled": true, "allowUsersAndGroups": true, "allowApplications": true
+    }],
+    "api": {
+      "requestedAccessTokenVersion": 2,
+      "scopes": [{
+        "id": "88888888-2222-4333-8444-555555555555",
+        "value": "access_as_user",
+        "adminConsentDisplayName": "Access API",
+        "adminConsentDescription": "Access the API as a user",
+        "consentType": "Admin", "isEnabled": true
+      }],
+      "preAuthorizedApplications": [{
+        "appId": "99999999-2222-4333-8444-555555555555",
+        "delegatedPermissionIds": ["88888888-2222-4333-8444-555555555555"]
+      }]
+    }
+  },
+  "requestedApiPermissions": [{
+    "targetType": "ExternalApi",
+    "targetExternalApiAppId": "00000003-0000-0000-c000-000000000000",
+    "targetExternalApiDisplayName": "Microsoft Graph",
+    "grantType": "AppRole",
+    "justification": "Scheduled synchronization",
+    "permissions": [{
+      "id": "df021288-bdef-4463-88db-98f22de89214",
+      "displayName": "Read all users", "value": "User.Read.All", "requiresAdminConsent": true
+    }]
+  }],
+  "apiPermissionRequests": [{
+    "id": 123, "status": "Pending", "targetType": "ExternalApi", "grantType": "AppRole",
+    "requestedPermissionId": "df021288-bdef-4463-88db-98f22de89214"
+  }],
+  "createdOn": "2026-10-17T12:00:00Z"
+}

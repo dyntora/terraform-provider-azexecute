@@ -73,13 +73,15 @@ func IsNotFound(err error) bool {
 		apiErr.Service == "" && (apiErr.Code == "" || apiErr.Code == "terraform_resource_not_found")
 }
 
-// DELETE returns 204 when a resource is already absent. A bare 404 can come
-// from routing or an upstream service; it is not evidence of completed cleanup.
-func IsDeleteNotFound(err error) bool {
+// Only an explicit Terraform API code proves absence. Bare routing/proxy 404s
+// must retain state so that retries cannot create duplicate applications.
+func IsApplicationNotFound(err error) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound &&
 		apiErr.Service == "" && apiErr.Code == "terraform_resource_not_found"
 }
+
+func IsDeleteNotFound(err error) bool { return IsApplicationNotFound(err) }
 
 func New(endpoint, scope, staticToken string, credential azcore.TokenCredential, timeout time.Duration) (*Client, error) {
 	parsed, err := url.Parse(strings.TrimRight(endpoint, "/"))
@@ -105,6 +107,9 @@ func (c *Client) Capabilities(ctx context.Context) (*Capabilities, error) {
 }
 
 func (c *Client) CreateApplication(ctx context.Context, request ApplicationCreate) (*Application, error) {
+	if err := c.validateMetadataBeforeWrite(ctx, request.Metadata); err != nil {
+		return nil, err
+	}
 	if request.Registration != nil {
 		capabilities, err := c.Capabilities(ctx)
 		if err != nil {
@@ -115,16 +120,21 @@ func (c *Client) CreateApplication(ctx context.Context, request ApplicationCreat
 		}
 	}
 	var result Application
-	return &result, c.do(ctx, http.MethodPost, "api/terraform/v1/applications", request, &result)
+	err := c.do(ctx, http.MethodPost, "api/terraform/v1/applications", request, &result)
+	return &result, validateApplicationResponse(result, "", err)
 }
 
 func (c *Client) GetApplication(ctx context.Context, resourceID string) (*Application, error) {
 	var result Application
 	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID)
-	return &result, c.do(ctx, http.MethodGet, path, nil, &result)
+	err := c.do(ctx, http.MethodGet, path, nil, &result)
+	return &result, validateApplicationResponse(result, resourceID, err)
 }
 
 func (c *Client) UpdateApplication(ctx context.Context, resourceID string, request ApplicationUpdate) (*Application, error) {
+	if err := c.validateMetadataBeforeWrite(ctx, request.Metadata); err != nil {
+		return nil, err
+	}
 	if request.Details != nil {
 		capabilities, err := c.Capabilities(ctx)
 		if err != nil {
@@ -136,19 +146,43 @@ func (c *Client) UpdateApplication(ctx context.Context, resourceID string, reque
 	}
 	var result Application
 	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID)
-	return &result, c.do(ctx, http.MethodPut, path, request, &result)
+	err := c.do(ctx, http.MethodPut, path, request, &result)
+	return &result, validateApplicationResponse(result, resourceID, err)
+}
+
+func validateApplicationResponse(result Application, expectedID string, err error) error {
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(result.ResourceID) == "" || strings.TrimSpace(result.Status) == "" ||
+		(expectedID != "" && !strings.EqualFold(result.ResourceID, expectedID)) {
+		return fmt.Errorf("AZExecute returned an incomplete or mismatched application response; existing Terraform state is retained. Check the API deployment and proxy routing, then retry. A write may have completed; check AZExecute before creating another application")
+	}
+	return nil
 }
 
 func (c *Client) GetApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) (*ApplicationOwner, error) {
 	var result ApplicationOwner
 	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID) + "/owners/" + url.PathEscape(ownerObjectID)
-	return &result, c.do(ctx, http.MethodGet, path, nil, &result)
+	err := c.do(ctx, http.MethodGet, path, nil, &result)
+	return &result, validateOwnerResponse(result, resourceID, ownerObjectID, err)
 }
 
 func (c *Client) AddApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) (*ApplicationOwner, error) {
 	var result ApplicationOwner
 	path := "api/terraform/v1/applications/" + url.PathEscape(resourceID) + "/owners/" + url.PathEscape(ownerObjectID)
-	return &result, c.do(ctx, http.MethodPut, path, nil, &result)
+	err := c.do(ctx, http.MethodPut, path, nil, &result)
+	return &result, validateOwnerResponse(result, resourceID, ownerObjectID, err)
+}
+
+func validateOwnerResponse(result ApplicationOwner, resourceID, ownerObjectID string, err error) error {
+	if err != nil {
+		return err
+	}
+	if result.ResourceID == "" || result.OwnerObjectID == "" || !strings.EqualFold(result.ResourceID, resourceID) || !strings.EqualFold(result.OwnerObjectID, ownerObjectID) {
+		return fmt.Errorf("AZExecute returned an incomplete or mismatched application-owner response; check the API deployment and proxy routing, then retry")
+	}
+	return nil
 }
 
 func (c *Client) RemoveApplicationOwner(ctx context.Context, resourceID, ownerObjectID string) error {
@@ -242,6 +276,10 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, input, ou
 				apiErr.TraceID = response.Header.Get("X-Correlation-ID")
 			}
 			return apiErr
+		}
+		if method == http.MethodDelete && strings.HasPrefix(path, "api/terraform/v1/applications/") && response.StatusCode != http.StatusNoContent {
+			response.Body.Close()
+			return fmt.Errorf("AZExecute did not confirm deletion (HTTP %d; expected 204). Terraform state is retained; check the API/proxy and retry after cleanup completes", response.StatusCode)
 		}
 		if output == nil || response.StatusCode == http.StatusNoContent {
 			response.Body.Close()

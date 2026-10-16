@@ -41,12 +41,28 @@ func (r *applicationResource) ModifyPlan(ctx context.Context, request resource.M
 			return
 		}
 	}
+	resolveRequiredMetadataConfiguration(ctx, request, response, &plan, capabilities)
+	if response.Diagnostics.HasError() {
+		return
+	}
 	errors := validateSynchronousApplicationPlan(plan, capabilities, request.State.Raw.IsNull())
 	validateApplicationDetailsPlan(ctx, request, response, capabilities)
 	if len(errors) > 0 {
 		response.Diagnostics.AddError(
 			"Invalid application configuration for this AZExecute tenant",
 			strings.Join(errors, "\n"))
+	}
+}
+
+func resolveRequiredMetadataConfiguration(ctx context.Context, request resource.ModifyPlanRequest, response *resource.ModifyPlanResponse, plan *applicationResourceModel, capabilities *azclient.Capabilities) {
+	// Optional+Computed metadata is unknown both when omitted and when supplied by
+	// another resource. Only the latter is a valid deferred required value.
+	if request.State.Raw.IsNull() && plan.BusinessJustification.IsUnknown() {
+		for _, name := range capabilities.RequiredMetadataFields {
+			if name == "business_justification" {
+				response.Diagnostics.Append(request.Config.GetAttribute(ctx, path.Root(name), &plan.BusinessJustification)...)
+			}
+		}
 	}
 }
 
@@ -60,6 +76,11 @@ func validateSynchronousApplicationPlan(model applicationResourceModel, capabili
 
 func validateApplicationPlan(model applicationResourceModel, capabilities *azclient.Capabilities, creating bool) []string {
 	var errors []string
+	if err := azclient.ValidateMetadataPreservation(capabilities,
+		!model.RequiresElevatedPermissions.IsUnknown() && model.RequiresElevatedPermissions.ValueBool(),
+		!model.ElevatedPermissionsJustification.IsNull() && !model.ElevatedPermissionsJustification.IsUnknown()); err != nil {
+		errors = append(errors, err.Error())
+	}
 	if !capabilities.Enabled {
 		errors = append(errors, "the AZExecute Terraform API is disabled by the tenant policy")
 	}
@@ -73,7 +94,7 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 		errors = append(errors, "this API does not support registration configuration in requests; upgrade AZExecute before submitting configure_registration = true")
 	}
 	if setIsConfigured(model.ExposedScopes) || setIsConfigured(model.PreAuthorizedApplications) {
-		if !boolValue(model.ConfigureRegistration, false) {
+		if !model.ConfigureRegistration.IsUnknown() && !boolValue(model.ConfigureRegistration, false) {
 			errors = append(errors, "exposed_scopes and pre_authorized_applications require configure_registration = true")
 		}
 		if _, err := scopesFromModel(context.Background(), model.ExposedScopes, nil); fullyKnownSet(model.ExposedScopes) && err != nil {
@@ -84,9 +105,9 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 		}
 	}
 	if setIsConfigured(model.AppRoles) {
-		if !boolValue(model.ConfigureRegistration, false) {
+		if !model.ConfigureRegistration.IsUnknown() && !boolValue(model.ConfigureRegistration, false) {
 			errors = append(errors, "app_roles requires configure_registration = true")
-		} else if _, err := appRolesFromModel(context.Background(), model.AppRoles, nil); err != nil {
+		} else if _, err := appRolesFromModel(context.Background(), model.AppRoles, nil); fullyKnownSet(model.AppRoles) && err != nil {
 			errors = append(errors, err.Error())
 		}
 	}
@@ -128,11 +149,11 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 		if field == "elevated_permissions_justification" && !boolValue(model.RequiresElevatedPermissions, false) {
 			continue
 		}
-		if missingString(value) {
+		if !value.IsUnknown() && missingString(value) {
 			errors = append(errors, fmt.Sprintf("%s is required by the tenant metadata policy", field))
 		}
 	}
-	if _, ok := required["expected_go_live_date"]; ok && missingString(model.ExpectedGoLiveDate) {
+	if _, ok := required["expected_go_live_date"]; ok && !model.ExpectedGoLiveDate.IsUnknown() && missingString(model.ExpectedGoLiveDate) {
 		errors = append(errors, "expected_go_live_date is required by the tenant metadata policy")
 	}
 

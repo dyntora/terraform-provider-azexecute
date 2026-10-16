@@ -28,6 +28,7 @@ func TestDeletedApplicationRefreshAllowsCreationWithNewIdentity(t *testing.T) {
 				}
 				if req.Method == http.MethodGet && req.URL.Path == "/api/terraform/v1/applications/"+oldID {
 					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte(`{"code":"terraform_resource_not_found"}`))
 					return
 				}
 				if req.Method != http.MethodPost || req.URL.Path != "/api/terraform/v1/applications" {

@@ -90,7 +90,7 @@ func (r *applicationOwnerResource) Read(ctx context.Context, request resource.Re
 		return
 	}
 	result, err := r.client.GetApplicationOwner(ctx, resourceID, ownerID)
-	if azclient.IsNotFound(err) {
+	if azclient.IsApplicationNotFound(err) {
 		response.State.RemoveResource(ctx)
 		return
 	}
@@ -115,7 +115,7 @@ func (r *applicationOwnerResource) Delete(ctx context.Context, request resource.
 	if !ok {
 		return
 	}
-	if err := r.client.RemoveApplicationOwner(ctx, resourceID, ownerID); err != nil && !azclient.IsNotFound(err) {
+	if err := r.client.RemoveApplicationOwner(ctx, resourceID, ownerID); err != nil && !azclient.IsApplicationNotFound(err) {
 		response.Diagnostics.AddError("Unable to remove AZExecute application owner", err.Error())
 	}
 }
@@ -132,8 +132,8 @@ func (r *applicationOwnerResource) ImportState(ctx context.Context, request reso
 }
 
 func validateOwnerResourceIdentity(model applicationOwnerResourceModel, diagnostics *diag.Diagnostics) (string, string, bool) {
-	resourceID := strings.ToLower(strings.TrimSpace(model.ApplicationResourceID.ValueString()))
-	ownerID := strings.ToLower(strings.TrimSpace(model.OwnerObjectID.ValueString()))
+	resourceID := strings.ToLower(model.ApplicationResourceID.ValueString())
+	ownerID := strings.ToLower(model.OwnerObjectID.ValueString())
 	if !uuidPattern.MatchString(resourceID) || !uuidPattern.MatchString(ownerID) {
 		diagnostics.AddError("Invalid application owner identity", "application_resource_id and owner_object_id must both be non-empty UUIDs.")
 		return "", "", false
@@ -142,8 +142,8 @@ func validateOwnerResourceIdentity(model applicationOwnerResourceModel, diagnost
 }
 
 func setApplicationOwnerModel(model *applicationOwnerResourceModel, source *azclient.ApplicationOwner) {
-	model.ApplicationResourceID = types.StringValue(strings.ToLower(source.ResourceID))
-	model.OwnerObjectID = types.StringValue(strings.ToLower(source.OwnerObjectID))
+	model.ApplicationResourceID = uuidValue(model.ApplicationResourceID, source.ResourceID)
+	model.OwnerObjectID = uuidValue(model.OwnerObjectID, source.OwnerObjectID)
 	model.ID = types.StringValue(ownerResourceID(source.ResourceID, source.OwnerObjectID))
 }
 

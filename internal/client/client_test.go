@@ -38,6 +38,25 @@ func TestCapabilitiesUsesBearerTokenAndVersionedPath(t *testing.T) {
 	}
 }
 
+func TestApplicationResponsesMustConfirmRequestedIdentity(t *testing.T) {
+	for _, owner := range []bool{false, true} {
+		for _, body := range []string{`{}`, `{"resourceId":"wrong","status":"Ready","ownerObjectId":"owner"}`, `{"resourceId":"resource"}`} {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
+			api, _ := New(server.URL, "scope", "token", nil, time.Second)
+			var err error
+			if owner {
+				_, err = api.GetApplicationOwner(context.Background(), "resource", "owner")
+			} else {
+				_, err = api.GetApplication(context.Background(), "resource")
+			}
+			server.Close()
+			if err == nil || !strings.Contains(err.Error(), "incomplete or mismatched") {
+				t.Fatalf("accepted invalid owner=%v response: %s, %v", owner, body, err)
+			}
+		}
+	}
+}
+
 func TestRetriesTransientResponsesWithReusablePostBody(t *testing.T) {
 	t.Parallel()
 	var attempts atomic.Int32

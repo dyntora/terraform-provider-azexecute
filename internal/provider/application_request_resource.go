@@ -105,6 +105,12 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 			for _, name := range []string{"status", "status_reason", "application_entity_id", "application_id", "application_object_id"} {
 				response.Diagnostics.Append(response.Plan.SetAttribute(ctx, path.Root(name), types.StringUnknown())...)
 			}
+			var configured applicationRequestResourceModel
+			response.Diagnostics.Append(request.Config.Get(ctx, &configured)...)
+			if response.Diagnostics.HasError() {
+				return
+			}
+			planPendingRegistration(ctx, configured.toApplicationModel(), response)
 		}
 	}
 
@@ -120,7 +126,12 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 			return
 		}
 	}
-	errors := validateApplicationPlan(plan.toApplicationModel(), capabilities, request.State.Raw.IsNull())
+	validationPlan := plan.toApplicationModel()
+	resolveRequiredMetadataConfiguration(ctx, request, response, &validationPlan, capabilities)
+	if response.Diagnostics.HasError() {
+		return
+	}
+	errors := validateApplicationPlan(validationPlan, capabilities, request.State.Raw.IsNull())
 	validateApplicationDetailsPlan(ctx, request, response, capabilities)
 	if len(errors) > 0 {
 		response.Diagnostics.AddError("Invalid application request configuration for this AZExecute tenant", strings.Join(errors, "\n"))
@@ -181,21 +192,21 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 		warnApplicationRequestFailure(result, &response.Diagnostics)
 	}
 
-	// New API requests are fully configured by approved provisioning. Keep the legacy
-	// fallback for servers/resources that do not return a stored creation snapshot.
+	// Approved provisioning applies the stored registration snapshot. Reconcile
+	// owners and any metadata drift in place; only legacy requests need registration.
 	postCreatePlan := applicationPlan
 	if result.RequestedRegistration != nil {
 		postCreatePlan.ConfigureRegistration = types.BoolValue(false)
 	}
-	if result.Status == "Ready" && (boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs)) {
+	if result.Status == "Ready" && (boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs) || len(metadataDifferences(applicationPlan, result)) > 0) {
 		update, updateErr := updateRequestFromModel(ctx, postCreatePlan, result)
 		if updateErr != nil {
-			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
+			response.Diagnostics.AddError("Invalid application settings", updateErr.Error())
 			return
 		}
 		result, err = r.client.UpdateApplication(ctx, result.ResourceID, update)
 		if err != nil {
-			response.Diagnostics.AddError("Unable to configure approved application registration", err.Error())
+			response.Diagnostics.AddError("Unable to reconcile approved application settings", err.Error())
 			return
 		}
 		result, err = waitForManagedRegistration(ctx, r.client, result.ResourceID, applicationPlan, result)
@@ -208,6 +219,7 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 	mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
 	if !response.Diagnostics.HasError() {
 		response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
+		diagnoseMetadataResult(applicationPlan, result, &response.Diagnostics)
 	}
 }
 
@@ -219,7 +231,7 @@ func (r *applicationRequestResource) Read(ctx context.Context, request resource.
 	}
 
 	result, err := r.client.GetApplication(ctx, state.ID.ValueString())
-	if azclient.IsNotFound(err) {
+	if azclient.IsApplicationNotFound(err) {
 		response.State.RemoveResource(ctx)
 		return
 	}
@@ -291,9 +303,11 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 		return
 	}
 
+	desired := plan.toApplicationModel()
 	mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
 	if !response.Diagnostics.HasError() {
 		response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
+		diagnoseMetadataResult(desired, result, &response.Diagnostics)
 	}
 }
 
@@ -309,7 +323,7 @@ func (r *applicationRequestResource) Delete(ctx context.Context, request resourc
 }
 
 func (r *applicationRequestResource) ImportState(ctx context.Context, request resource.ImportStateRequest, response *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), request, response)
+	importApplicationState(ctx, r.client, request, response)
 }
 
 // MoveState provides a lossless upgrade path for configurations that used the

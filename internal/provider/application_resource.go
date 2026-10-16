@@ -11,7 +11,6 @@ import (
 	azclient "github.com/dyntora/terraform-provider-azexecute/internal/client"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
@@ -312,15 +311,15 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 	if result.RequestedRegistration != nil {
 		postCreatePlan.ConfigureRegistration = types.BoolValue(false)
 	}
-	if boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs) {
+	if boolValue(postCreatePlan.ConfigureRegistration, false) || setIsConfigured(postCreatePlan.OwnerObjectIDs) || len(metadataDifferences(desired, result)) > 0 {
 		update, updateErr := updateRequestFromModel(ctx, postCreatePlan, result)
 		if updateErr != nil {
-			response.Diagnostics.AddError("Invalid registration configuration", updateErr.Error())
+			response.Diagnostics.AddError("Invalid application settings", updateErr.Error())
 			return
 		}
 		result, err = r.client.UpdateApplication(ctx, resourceID, update)
 		if err != nil {
-			response.Diagnostics.AddError("Unable to configure application registration", err.Error())
+			response.Diagnostics.AddError("Unable to reconcile application settings", err.Error())
 			return
 		}
 		result, err = waitForManagedRegistration(ctx, r.client, resourceID, desired, result)
@@ -330,11 +329,13 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 		}
 	}
 
+	expectedMetadata := desired
 	mapApplicationToModel(ctx, result, &desired, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
 	}
 	response.Diagnostics.Append(response.State.Set(ctx, &desired)...)
+	diagnoseMetadataResult(expectedMetadata, result, &response.Diagnostics)
 }
 
 func (r *applicationResource) Read(ctx context.Context, request resource.ReadRequest, response *resource.ReadResponse) {
@@ -344,7 +345,7 @@ func (r *applicationResource) Read(ctx context.Context, request resource.ReadReq
 		return
 	}
 	result, err := r.client.GetApplication(ctx, state.ID.ValueString())
-	if azclient.IsNotFound(err) {
+	if azclient.IsApplicationNotFound(err) {
 		response.State.RemoveResource(ctx)
 		return
 	}
@@ -398,9 +399,11 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 		response.Diagnostics.AddError("Application registration update did not converge", err.Error())
 		return
 	}
+	desired := plan
 	mapApplicationToModel(ctx, result, &plan, &response.Diagnostics)
 	if !response.Diagnostics.HasError() {
 		response.Diagnostics.Append(response.State.Set(ctx, &plan)...)
+		diagnoseMetadataResult(desired, result, &response.Diagnostics)
 	}
 }
 
@@ -417,7 +420,7 @@ func (r *applicationResource) Delete(ctx context.Context, request resource.Delet
 }
 
 func (r *applicationResource) ImportState(ctx context.Context, request resource.ImportStateRequest, response *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), request, response)
+	importApplicationState(ctx, r.client, request, response)
 }
 
 func createRequestFromModel(ctx context.Context, model applicationResourceModel, resourceID string) (azclient.ApplicationCreate, error) {
@@ -552,30 +555,13 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 
 func mapApplicationToModel(ctx context.Context, source *azclient.Application, target *applicationResourceModel, diagnostics *diag.Diagnostics) {
 	target.ID = types.StringValue(source.ResourceID)
-	target.DisplayName = types.StringValue(source.DisplayName)
+	target.DisplayName = normalizedTextValue(target.DisplayName, source.DisplayName)
 	// Entra can normalize an explicitly empty description to null. Preserve a
 	// configured empty string while still reflecting an actual removal as null.
 	if source.Description != nil || target.Description.IsNull() || target.Description.IsUnknown() || target.Description.ValueString() != "" {
 		target.Description = stringTypeFromPointer(source.Description)
 	}
-	target.BusinessJustification = types.StringValue(source.Metadata.BusinessJustification)
-	target.TechnicalRequirements = stringTypeFromPointer(source.Metadata.TechnicalRequirements)
-	target.IntendedAudience = stringTypeFromPointer(source.Metadata.IntendedAudience)
-	target.DataAccessRequirements = stringTypeFromPointer(source.Metadata.DataAccessRequirements)
-	target.ComplianceNotes = stringTypeFromPointer(source.Metadata.ComplianceNotes)
-	if source.Metadata.ExpectedGoLiveDate == nil {
-		target.ExpectedGoLiveDate = types.StringNull()
-	} else {
-		target.ExpectedGoLiveDate = expectedGoLiveDateValue(target.ExpectedGoLiveDate, *source.Metadata.ExpectedGoLiveDate)
-	}
-	target.ProjectName = stringTypeFromPointer(source.Metadata.ProjectName)
-	target.DepartmentOwner = stringTypeFromPointer(source.Metadata.DepartmentOwner)
-	target.BusinessCriticality = types.Int64Value(source.Metadata.BusinessCriticality)
-	target.RequiresElevatedPermissions = types.BoolValue(source.Metadata.RequiresElevatedPermissions)
-	target.ElevatedPermissionsJustification = stringTypeFromPointer(source.Metadata.ElevatedPermissionsJustification)
-	target.Environment = stringTypeFromPointer(source.Metadata.Environment)
-	target.ContactEmail = stringTypeFromPointer(source.Metadata.ContactEmail)
-	target.ContactPhone = stringTypeFromPointer(source.Metadata.ContactPhone)
+	mapApplicationMetadataToModel(source.Metadata, target)
 	var ownerDiagnostics diag.Diagnostics
 	target.OwnerObjectIDs, ownerDiagnostics = types.SetValueFrom(ctx, types.StringType, managedOwnerObjectIDs(source, target.OwnerObjectIDs))
 	diagnostics.Append(ownerDiagnostics...)
@@ -593,14 +579,14 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	if registration != nil {
 		target.SignInAudience = types.StringValue(registration.SignInAudience)
 		target.IsFallbackPublicClient = types.BoolValue(registration.IsFallbackPublicClient)
-		target.WebHomePageURL = stringTypeFromPointer(registration.Web.HomePageURL)
-		target.WebLogoutURL = stringTypeFromPointer(registration.Web.LogoutURL)
+		target.WebHomePageURL = optionalTextValue(target.WebHomePageURL, registration.Web.HomePageURL)
+		target.WebLogoutURL = optionalTextValue(target.WebLogoutURL, registration.Web.LogoutURL)
 		target.WebEnableAccessTokenIssuance = types.BoolValue(registration.Web.EnableAccessTokenIssuance)
 		target.WebEnableIDTokenIssuance = types.BoolValue(registration.Web.EnableIDTokenIssuance)
 		target.RequestedAccessTokenVersion = int64TypeFromPointer(registration.API.RequestedAccessTokenVersion)
 		var setDiagnostics diag.Diagnostics
 		if setIsConfigured(target.AppRoles) {
-			target.AppRoles, setDiagnostics = types.SetValueFrom(ctx, appRoleObjectType(), appRoleModelsFromClient(registration.AppRoles))
+			target.AppRoles, setDiagnostics = types.SetValueFrom(ctx, appRoleObjectType(), appRoleModelsWithConfiguredIDs(ctx, registration.AppRoles, target.AppRoles))
 			diagnostics.Append(setDiagnostics...)
 		}
 		mapExposedAPIToModel(ctx, registration.API, target, diagnostics)
@@ -682,18 +668,23 @@ func waitForManagedRegistration(
 // Ignore only API-maintained automation identities that were not explicitly
 // configured (or retained in prior state). All other ownership drift remains visible.
 func managedOwnerObjectIDs(source *azclient.Application, desired types.Set) []string {
+	configured := make(map[string]string)
 	automation := make(map[string]bool, len(source.AutomationOwnerObjectIDs))
 	for _, id := range source.AutomationOwnerObjectIDs {
 		automation[strings.ToLower(id)] = true
 	}
 	for _, value := range desired.Elements() {
 		if id, ok := value.(types.String); ok && !id.IsNull() && !id.IsUnknown() {
+			configured[strings.ToLower(id.ValueString())] = id.ValueString()
 			delete(automation, strings.ToLower(id.ValueString()))
 		}
 	}
 	owners := make([]string, 0, len(source.OwnerObjectIDs))
 	for _, id := range source.OwnerObjectIDs {
 		if !automation[strings.ToLower(id)] {
+			if spelling, found := configured[strings.ToLower(id)]; found {
+				id = spelling
+			}
 			owners = append(owners, id)
 		}
 	}
@@ -880,6 +871,23 @@ func appRoleModelsFromClient(roles []azclient.AppRoleConfiguration) []appRoleMod
 	return result
 }
 
+func appRoleModelsWithConfiguredIDs(ctx context.Context, roles []azclient.AppRoleConfiguration, desired types.Set) []appRoleModel {
+	var configured []appRoleModel
+	if fullyKnownSet(desired) && !desired.IsNull() {
+		desired.ElementsAs(ctx, &configured, false)
+	}
+	result := appRoleModelsFromClient(roles)
+	for i := range result {
+		for _, role := range configured {
+			if !role.ID.IsNull() && !role.ID.IsUnknown() && strings.EqualFold(role.ID.ValueString(), result[i].ID.ValueString()) {
+				result[i].ID = role.ID
+				break
+			}
+		}
+	}
+	return result
+}
+
 func configuredAppRolesDiffer(ctx context.Context, desired types.Set, observed []azclient.AppRoleConfiguration) bool {
 	if !setIsConfigured(desired) {
 		return false
@@ -1060,4 +1068,47 @@ func redirectValues(value types.Set, current []azclient.RedirectURI) []azclient.
 		}
 	}
 	return result
+}
+
+func mapApplicationMetadataToModel(source azclient.ApplicationMetadata, target *applicationResourceModel) {
+	target.BusinessJustification = normalizedTextValue(target.BusinessJustification, source.BusinessJustification)
+	target.TechnicalRequirements = optionalTextValue(target.TechnicalRequirements, source.TechnicalRequirements)
+	target.IntendedAudience = optionalTextValue(target.IntendedAudience, source.IntendedAudience)
+	target.DataAccessRequirements = optionalTextValue(target.DataAccessRequirements, source.DataAccessRequirements)
+	target.ComplianceNotes = optionalTextValue(target.ComplianceNotes, source.ComplianceNotes)
+	if source.ExpectedGoLiveDate == nil {
+		target.ExpectedGoLiveDate = types.StringNull()
+	} else {
+		target.ExpectedGoLiveDate = expectedGoLiveDateValue(target.ExpectedGoLiveDate, *source.ExpectedGoLiveDate)
+	}
+	target.ProjectName = optionalTextValue(target.ProjectName, source.ProjectName)
+	target.DepartmentOwner = optionalTextValue(target.DepartmentOwner, source.DepartmentOwner)
+	target.BusinessCriticality = types.Int64Value(source.BusinessCriticality)
+	target.RequiresElevatedPermissions = types.BoolValue(source.RequiresElevatedPermissions)
+	target.ElevatedPermissionsJustification = optionalTextValue(target.ElevatedPermissionsJustification, source.ElevatedPermissionsJustification)
+	target.Environment = optionalTextValue(target.Environment, source.Environment)
+	target.ContactEmail = optionalTextValue(target.ContactEmail, source.ContactEmail)
+	target.ContactPhone = optionalTextValue(target.ContactPhone, source.ContactPhone)
+}
+
+// Preserve only equivalent spellings. Different remote values still expose drift.
+func normalizedTextValue(previous types.String, actual string) types.String {
+	if !previous.IsNull() && !previous.IsUnknown() && strings.TrimSpace(previous.ValueString()) == strings.TrimSpace(actual) {
+		return previous
+	}
+	return types.StringValue(actual)
+}
+
+func optionalTextValue(previous types.String, actual *string) types.String {
+	if actual == nil && !previous.IsNull() && !previous.IsUnknown() && previous.ValueString() == "" {
+		return previous
+	}
+	return stringTypeFromPointer(actual)
+}
+
+func uuidValue(previous types.String, actual string) types.String {
+	if !previous.IsNull() && !previous.IsUnknown() && strings.EqualFold(previous.ValueString(), actual) {
+		return previous
+	}
+	return types.StringValue(strings.ToLower(actual))
 }

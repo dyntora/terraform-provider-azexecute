@@ -22,12 +22,15 @@ refresh; a detected concurrency conflict requires a fresh plan before retrying.
 
 ## Failed or Rejected Requests: Start Over
 
-In the tenant-admin application request details, use **Clean up and retire** to
-start over with an incomplete or rejected request. This verifies and removes
+Remove the resource from configuration and apply, or use `terraform destroy`,
+to cancel a pending/rejected request or delete a provisioned application under
+the tenant's deletion policy. Review the plan before applying. For administrator
+recovery, use **Clean up and retire** in the request details. This verifies and removes
 resources created by that request, preserves its history, and releases its
 Terraform name reservation. If cleanup fails, the request remains present and its
-resource references are retained for another attempt. An application already
-managed in AZExecute must be deleted from **Applications** first.
+resource references are retained for another attempt. Provisioned applications
+can be deleted through Terraform when application deletion is enabled and the
+caller has access.
 
 If Entra is still removing the enterprise application, cleanup keeps
 the request reserved and explains that you must wait and retry. It does not treat
@@ -57,6 +60,11 @@ Automation identities do not satisfy the human-owner minimum. A caller that has
 already lost access still needs an administrator to restore it before updating.
 
 ## Recreate an Application Deleted in AZExecute
+
+The updated provider accepts only an explicit `terraform_resource_not_found`
+API response as proof of absence, including for individual owners. A bare HTTP
+404 can be a proxy or routing failure and retains state. Deploy the matching API
+first; it returns the explicit code for confirmed missing resources.
 
 Run `terraform plan` after manual deletion. Refresh reports the old application
 as missing and plans a new create.

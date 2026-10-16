@@ -1,17 +1,31 @@
 # Changelog
 
+## 0.12.2
+
+- Preserve generated identifier URIs and registration defaults when enabling waiting on an existing pending request.
+- Expose `preserves_hidden_metadata` through the capabilities data source.
+- Defer tenant-required metadata and app-role IDs supplied by other Terraform resources until apply, while still rejecting known missing required fields during plan.
+- Preserve equivalent UUID casing, normalized text, and explicit empty optional strings; keep empty identifier-URI sets stable across refresh and apply.
+- Retain application and owner state when responses are incomplete or do not confirm that the resource is missing.
+- Retain state until deletion is confirmed, and apply application access and recovery checks when reading owners.
+- Restore original API-permission request blocks during import to avoid unintended replacement. Changes to those blocks still require replacement; importing them does not grant consent.
+- Preserve supplied elevated-permission metadata when tenant form controls are hidden. Value validation and required-field rules still apply.
+- Report metadata compatibility problems before submitting changes, with actionable field-level guidance.
+- Correct metadata drift in place. Report remaining mismatches with field names and request/resource identifiers while retaining state.
+- Clarify cancellation, deletion, and recovery guidance for rejected requests, paused provisioning, and failed applies.
+
 ## 0.12.1
 
 - Preserve both application resources in Terraform state when Microsoft Graph reports a dependency 404 during refresh or destroy. Only an AZExecute resource-not-found response means the resource is absent.
-- The matching server update confirms Entra application and service-principal deletion before retiring requests, serializes destroy with provisioning, retains checkpoints after failures, and supports retrying partial deletion.
+- Confirm Entra application and service-principal deletion before retiring requests, prevent conflicting provisioning and deletion operations, and support retrying partial deletion.
 - Recover incorrectly retired requests and missing local application records without reporting live Entra objects as deleted. Tenant administrators can use **Clean up and retire** for verified orphaned requests; replacement creation keeps the name reserved while cleanup is required.
-- Deploy the matching server update as well as provider 0.12.1. Normal Entra soft deletion remains unchanged; destroy does not permanently purge deleted items.
+- Preserve normal Entra soft deletion; destroy does not permanently purge deleted items.
 
 ## 0.12.0
 
 - Add optional `wait_for_completion`, `poll_interval_seconds` and `create_timeout_minutes` to `azexecute_application_request`. Waiting preserves request identity and stops on rejection or provisioning failures.
-- Warn on asynchronous request refresh when provisioning needs attention or approval was rejected. The matching API update returns the failed stage, safe Graph explanation and attempt reference in `status_reason`.
-- The matching API/worker update publishes and confirms exposed scopes before pre-authorizing clients, removes obsolete references before scope deletion, and retries scope-propagation failures without deleting the application or pausing provisioning for administrator cleanup. Deploy the server update as well as the provider; previously paused requests still require an explicit retry.
+- Warn on asynchronous request refresh when provisioning needs attention or approval was rejected. Include the failed stage, safe Graph explanation and attempt reference in `status_reason`.
+- Improve provisioning of exposed scopes and pre-authorized clients, including retries for propagation delays and removal of obsolete references before scope deletion. Previously paused requests still require an explicit retry.
 
 ## 0.11.7
 

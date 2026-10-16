@@ -36,6 +36,9 @@ This data source has no arguments.
 
 ### Read-Only
 
+- `preserves_hidden_metadata` (Boolean) — whether the API preserves valid supplied
+  metadata when form fields are hidden. Missing on older APIs means false; the
+  provider checks field visibility before affected writes to those APIs.
 - `minimum_additional_owners` (Number) — minimum distinct Entra user owners in addition to the original requester. Service principals do not count. The API enforces this on creation, updates and owner removal.
 
 - `id` (String) â€” stable data-source ID; currently `tenant`.
@@ -54,9 +57,9 @@ This data source has no arguments.
 - `use_api_permission_request_flow` (Boolean) â€” whether permission requests use
   the normal approval flow. When false, supported permission requests can be
   applied automatically using tenant-admin authority.
-- `included_metadata_fields` (Set of String) â€” metadata fields enabled in the
-  tenant's Terraform/application metadata policy, using provider argument
-  names.
+- `included_metadata_fields` (Set of String) — metadata fields visible in tenant
+  forms, using provider argument names. Visibility does not prohibit storing valid
+  values with an API advertising `preserves_hidden_metadata`.
 - `required_metadata_fields` (Set of String) â€” enabled metadata fields that the
   tenant currently requires, using provider argument names.
 

@@ -86,6 +86,51 @@ func TestValidateApplicationPlanUsesTenantMetadataRequirements(t *testing.T) {
 	}
 }
 
+func TestPlanDefersRequiredMetadataAndRolesFromOtherResources(t *testing.T) {
+	model := applicationResourceModel{
+		DisplayName:           types.StringValue("Pipeline API"),
+		BusinessJustification: types.StringUnknown(), ProjectName: types.StringUnknown(),
+		ExpectedGoLiveDate: types.StringUnknown(), ConfigureRegistration: types.BoolValue(true),
+		AppRoles: appRoleSet(t, appRoleModel{ID: types.StringUnknown(), DisplayName: types.StringValue("Read"),
+			Value: types.StringValue("Read"), Description: types.StringValue("Read application data"),
+			IsEnabled: types.BoolValue(true), AllowApplications: types.BoolValue(true), AllowUsersAndGroups: types.BoolValue(false)}),
+	}
+	capabilities := &azclient.Capabilities{Enabled: true, AllowApplicationCreation: true,
+		AllowRegistrationConfiguration: true, SupportsRegistrationRequests: true,
+		RequiredMetadataFields: []string{"business_justification", "project_name", "expected_go_live_date"}}
+	if errors := validateApplicationPlan(model, capabilities, true); len(errors) != 0 {
+		t.Fatalf("valid deferred inputs rejected: %v", errors)
+	}
+	model.ProjectName = types.StringNull()
+	if errors := validateApplicationPlan(model, capabilities, true); len(errors) != 1 || !strings.Contains(errors[0], "project_name") {
+		t.Fatalf("known missing input must still fail: %v", errors)
+	}
+}
+
+func TestRequiredComputedMetadataDistinguishesOmissionFromReference(t *testing.T) {
+	ctx := context.Background()
+	s := managedApplicationSchema(false)
+	for _, configured := range []types.String{types.StringNull(), types.StringUnknown()} {
+		config := tfsdk.Plan{Schema: s, Raw: tftypes.NewValue(s.Type().TerraformType(ctx), nil)}
+		if d := config.SetAttribute(ctx, path.Root("business_justification"), configured); d.HasError() {
+			t.Fatal(d)
+		}
+		model := applicationResourceModel{DisplayName: types.StringValue("API"), BusinessJustification: types.StringUnknown()}
+		response := resource.ModifyPlanResponse{}
+		capabilities := &azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, RequiredMetadataFields: []string{"business_justification"}}
+		resolveRequiredMetadataConfiguration(ctx, resource.ModifyPlanRequest{
+			Config: tfsdk.Config{Schema: s, Raw: config.Raw}, State: tfsdk.State{Schema: s, Raw: tftypes.NewValue(s.Type().TerraformType(ctx), nil)},
+		}, &response, &model, capabilities)
+		if response.Diagnostics.HasError() {
+			t.Fatal(response.Diagnostics)
+		}
+		errors := validateApplicationPlan(model, capabilities, true)
+		if (len(errors) > 0) != configured.IsNull() {
+			t.Fatalf("configuration %s: %v", configured, errors)
+		}
+	}
+}
+
 func TestPlanEnforcesMinimumAdditionalOwners(t *testing.T) {
 	capabilities := &azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, MinimumAdditionalOwners: 2}
 	for _, test := range []struct {
@@ -599,6 +644,15 @@ func TestApplicationOwnerImportIdentityRoundTrip(t *testing.T) {
 	}
 	if _, _, ok := splitOwnerResourceID(resourceID); ok {
 		t.Fatal("owner import identity without owner UUID was accepted")
+	}
+	model := applicationOwnerResourceModel{ApplicationResourceID: types.StringValue(resourceID), OwnerObjectID: types.StringValue(ownerID)}
+	setApplicationOwnerModel(&model, &azclient.ApplicationOwner{ResourceID: resourceID, OwnerObjectID: strings.ToLower(ownerID)})
+	if model.OwnerObjectID.ValueString() != ownerID {
+		t.Fatal("equivalent configured UUID spelling changed")
+	}
+	setApplicationOwnerModel(&model, &azclient.ApplicationOwner{ResourceID: resourceID, OwnerObjectID: resourceID})
+	if model.OwnerObjectID.ValueString() != resourceID {
+		t.Fatal("actual owner identity drift was hidden")
 	}
 }
 
