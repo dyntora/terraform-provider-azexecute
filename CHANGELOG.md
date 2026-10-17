@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.4
+
+- Remove enabled app roles and exposed scopes in one in-place apply, automatically disabling definitions before removal and preserving the application identity.
+- Edit enabled role and scope definitions without a separate disable-and-save step, retaining their IDs and applying the requested enabled state.
+- Remove obsolete pre-authorizations before deleting scopes, and retire old definitions before publishing replacement IDs that reuse their permission values.
+- Retry confirmed permission transitions when directory propagation delays subsequent writes. Interrupted updates provide guidance to refresh and resume without replacing the application.
+
 ## 0.12.3
 
 - Wait up to five minutes when application deletion is explicitly reported as unconfirmed or another application operation is still running. Resume cleanup of the same resource instead of failing the apply immediately.

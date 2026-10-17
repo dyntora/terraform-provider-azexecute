@@ -417,6 +417,33 @@ resource %q "test" {
 				t.Error("import replaced application")
 			}
 			mu.Unlock()
+			// The API owns Graph's disable/remove sequence. Terraform sends only
+			// the final empty sets and must preserve the application identity.
+			configuration, err := os.ReadFile(filepath.Join(dir, "main.tf"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			withoutDefinitions := string(configuration)
+			for _, attribute := range []string{"app_roles", "exposed_scopes", "pre_authorized_applications"} {
+				start := strings.Index(withoutDefinitions, "  "+attribute+" = [{")
+				if start < 0 {
+					t.Fatalf("missing %s in lifecycle test configuration", attribute)
+				}
+				end := strings.Index(withoutDefinitions[start:], "\n  }]")
+				if end < 0 {
+					t.Fatalf("missing end of %s", attribute)
+				}
+				withoutDefinitions = withoutDefinitions[:start] + "  " + attribute + " = []" + withoutDefinitions[start+end+len("\n  }]"):]
+			}
+			write("main.tf", withoutDefinitions)
+			run("apply", "-auto-approve", "-input=false", "-no-color")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if creates != 1 || deletes != 0 || app.ResourceID != originalID ||
+				len(app.Registration.AppRoles) != 0 || len(app.Registration.API.Scopes) != 0 || len(app.Registration.API.PreAuthorizedApplications) != 0 {
+				t.Error("clearing permission definitions must update the existing registration in place")
+			}
+			mu.Unlock()
 			// A prior failed creation can leave Terraform's taint mark. Its
 			// replacement must finish delayed cleanup before creating a new ID.
 			run("taint", "-no-color", resourceType+".test")

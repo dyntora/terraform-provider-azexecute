@@ -2,16 +2,14 @@
 page_title: "AZExecute Provider: Application Deployment Validation"
 subcategory: "Guides"
 description: |-
-  Verified lifecycle behavior, deployment requirements, and remaining live-tenant release checks.
+  Verified lifecycle behavior and remaining live-tenant release checks.
 ---
 
 # Application deployment validation
 
-Provider 0.12.2 and the matching API changes have local regression coverage
-for the application lifecycle. They have not been certified against a live Entra
-tenant by this audit. Deploy the API first, publish the provider, then validate
-the released pair in a non-production tenant before rollout. No database
-migration is required by these changes.
+Version 0.12.4 has local regression coverage for the application lifecycle,
+including role and scope removal. These checks have not been run against a live
+Entra tenant; the live-tenant scenarios below remain to be verified.
 
 ## Verified locally
 
@@ -25,6 +23,7 @@ Microsoft Graph behavior:
 | Approval/provisioning followed by Ready | Waiting records the resulting registration and identifiers |
 | Submit asynchronously, then enable waiting in a later apply | Generated identifier URIs survive approval and the subsequent update |
 | Roles, scopes, pre-authorized clients, redirects and owners | Configuration survives apply and subsequent plans |
+| Explicitly clear roles, scopes and pre-authorized clients | One in-place apply removes the definitions and the following plan is empty |
 | Hidden elevated-permission metadata | Values persist with the updated API; incompatible APIs fail with upgrade guidance |
 | Description/name/metadata edits | In-place update retains resource, client and object IDs |
 | Owner and app-role drift | Apply restores configured values; subsequent plan is empty |
@@ -39,8 +38,10 @@ Additional provider tests cover cancellation/timeouts, rejection, stale registra
 reads, state upgrades, owner operations, capability restrictions, malformed API
 responses, routing 404s, directory failures and authentication assertion sources.
 Backend tests cover metadata persistence, tenant policy, provisioning/recreation,
-cleanup and endpoint contracts. Optional PostgreSQL integration tests are outside
-this local run.
+cleanup and endpoint contracts. Graph SDK tests cover automatic disable, edit and
+removal of permission definitions, replacement IDs reusing existing values,
+propagation retries, concurrency conflicts and interrupted-update recovery.
+Optional PostgreSQL integration tests are outside this local run.
 
 A shared JSON fixture is checked against both the Go client and the C# API DTOs
 for metadata, registration settings, ownership, original permission submissions
@@ -49,7 +50,7 @@ Terraform CLI suite, `go vet`, formatting checks and Go race tests on Linux.
 
 The final local run passed the provider suite (including Terraform CLI 1.16.0),
 `go vet`, module integrity, formatting and release-documentation checks. The
-backend suite passed 5,169 tests, with two optional PostgreSQL integration tests
+backend suite passed 5,184 tests, with two optional PostgreSQL integration tests
 skipped. Local Windows race testing was unavailable because no C compiler was
 installed; the Linux release workflow must pass its race test before publishing.
 
@@ -99,7 +100,8 @@ identity with the required AZExecute role and application access.
 With the released API/worker/provider pair, run the customer-style configuration
 under the actual pipeline identity: create, wait for Ready, confirm owners and
 registration in Entra, confirm downstream permission outcomes separately, run a
-no-change plan, edit metadata and a redirect, repair deliberate test drift, import
+no-change plan, edit metadata and a redirect, edit and remove enabled roles and
+scopes, repair deliberate test drift, import
 the same resource into an isolated recovery state, and destroy the test resource.
 Use only one active state owner at a time. Repeat the approval flow in a tenant
 that requires approval. Confirm permission-denied and deletion-propagation errors

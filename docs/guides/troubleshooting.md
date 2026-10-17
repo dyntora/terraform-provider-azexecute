@@ -278,6 +278,25 @@ deletion has started, do not untaint based on an **Accepted** history entry: ver
 the actual application and service principal and finish or recover partial cleanup
 first. Accepted describes the approval decision, not current directory existence.
 
+## Removing Roles or Exposed Scopes
+
+Remove the unwanted definitions from the configured sets and apply once. Set a
+collection to `[]` to clear it; omitting it leaves that collection unmanaged.
+AZExecute handles the required disable, confirmation and removal calls while
+preserving the application identity. Remove pre-authorization references to
+deleted scopes in the same configuration change.
+
+If the response still says **Disable ... and save before removing it**, that
+endpoint is enforcing the older two-step workflow. The automatic sequence runs
+in AZExecute's registration update operation; the provider submits the desired
+end state.
+
+An interrupted update can leave obsolete definitions disabled. Keep Terraform
+state, run a fresh plan, and apply again to resume. The error
+`terraform_registration_update_unconfirmed` indicates that some writes may have
+completed but the complete configuration could not be confirmed. Do not replace
+the application as a workaround.
+
 ## State Lock Problems
 
 Confirm no other run is active. Azure Blob state uses a lease for locking; the

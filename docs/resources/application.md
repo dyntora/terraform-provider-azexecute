@@ -210,7 +210,7 @@ the value returned by AZExecute/Entra.
   version `2`.
 - `app_roles` (Set of Object) â€” authoritative Microsoft Entra app-role
   definitions. Omit this argument to preserve existing roles without managing
-  them. Set `[]` to remove all roles after they have been disabled.
+  them. Set `[]` to remove all roles in one apply.
 
 Each `app_roles` object supports:
 
@@ -226,10 +226,12 @@ Each `app_roles` object supports:
   principal assignments.
 
 At least one allowed-member flag must be true. IDs and values must be unique.
-To delete an enabled role, first keep it in `app_roles` with
-`is_enabled = false` and apply. Remove the disabled role from the set in a
-second apply. Manual edits to a configured role are detected during refresh and
-restored on apply.
+Remove a role from `app_roles` and apply. AZExecute disables obsolete roles,
+confirms the change, then removes them within the same update. The application
+and retained role IDs stay unchanged. Manual edits to a configured role are
+detected during refresh and restored on apply. Edits to enabled role definitions
+also perform the required disable step before applying the requested fields and
+final `is_enabled` value, keeping the same role ID.
 
 AZExecute validates redirect URI security, audience/token-version combinations,
 identifier URIs, app roles, and registration concurrency before writing to
@@ -245,7 +247,7 @@ The same scope and pre-authorization arguments apply here; use
 Requires `configure_registration = true` and tenant registration configuration permission.
 
 - `exposed_scopes` (Set of Object) — authoritative scopes published by this API.
-  Omit to preserve existing scopes. An explicit `[]` removes disabled scopes.
+  Omit to preserve existing scopes. An explicit `[]` removes all scopes.
 - `pre_authorized_applications` (Set of Object) — authoritative clients authorized
   for these scopes. Omit to preserve existing clients; `[]` removes them.
 
@@ -253,8 +255,17 @@ Each `exposed_scopes` object has required `id` (stable non-empty UUID), `value`,
 `admin_consent_display_name`, `admin_consent_description`, `consent_type` (`Admin`
 or `User`), and `is_enabled`. `user_consent_display_name` and
 `user_consent_description` are required for `User` and must be omitted for `Admin`.
-IDs and values must be unique. Disable a live scope and apply before removing it
-in a second apply. Remove any pre-authorization references to deleted scopes too.
+IDs and values must be unique. Remove scopes and their pre-authorization references
+in the same configuration change. AZExecute clears obsolete references, disables
+and confirms obsolete scopes, then removes them before publishing replacements.
+Edits to enabled scopes similarly disable the changed definition before updating
+its fields and requested enabled state, preserving the scope ID.
+An invalid final configuration that still references a removed scope is rejected
+before any Graph writes. Omitting a collection preserves it; omission is not deletion.
+
+If a staged update is interrupted, keep the resource in state, run a fresh plan,
+and apply again to resume from the observed configuration. Removing definitions
+does not automatically revoke external clients' consent or manage their assignments.
 
 Each `pre_authorized_applications` object has required `application_id` (client
 UUID) and `delegated_permission_ids` (non-empty set of this API's scope UUIDs).
