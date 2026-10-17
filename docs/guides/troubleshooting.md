@@ -255,6 +255,29 @@ permission. A provisioned application requires **Allow Application Deletion**
 in the tenant Terraform policy. Review the destroy plan before enabling that
 capability.
 
+## Deletion Is Waiting for Entra
+
+Provider 0.12.3 waits up to five minutes when AZExecute explicitly reports that
+directory deletion is unconfirmed or another provisioning/cleanup operation is
+still running. It resumes cleanup of the same resource and requires confirmed
+completion before removing Terraform state. Access denials and other conflicts
+still fail immediately.
+
+If the wait expires, run a fresh plan and retry the intended apply or destroy.
+Keep the existing state so cleanup can resume. An older response with code
+`application_request_changed` is a generic conflict and is not automatically
+retried; if its detail says deletion is still propagating, wait and retry the
+same operation.
+
+If the plan says a resource **is tainted, so must be replaced**, Terraform has
+retained a failed creation in state. Upgrading the provider does not clear that
+mark. Before any destroy starts, verify the existing application and request are
+complete, correct the original failure, and consider `terraform untaint` for that
+specific resource followed by a fresh plan to preserve its identity. Once
+deletion has started, do not untaint based on an **Accepted** history entry: verify
+the actual application and service principal and finish or recover partial cleanup
+first. Accepted describes the approval decision, not current directory existence.
+
 ## State Lock Problems
 
 Confirm no other run is active. Azure Blob state uses a lease for locking; the

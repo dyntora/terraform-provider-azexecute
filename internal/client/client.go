@@ -191,7 +191,7 @@ func (c *Client) RemoveApplicationOwner(ctx context.Context, resourceID, ownerOb
 }
 
 func (c *Client) DeleteApplication(ctx context.Context, resourceID string) error {
-	return c.do(ctx, http.MethodDelete, "api/terraform/v1/applications/"+url.PathEscape(resourceID), nil, nil)
+	return c.deleteApplication(ctx, resourceID, 5*time.Minute, 5*time.Second)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, input, output any) error {

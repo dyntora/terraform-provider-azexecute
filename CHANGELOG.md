@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.3
+
+- Wait up to five minutes when application deletion is explicitly reported as unconfirmed or another application operation is still running. Resume cleanup of the same resource instead of failing the apply immediately.
+- Retain Terraform state on deletion timeout or cancellation and provide guidance for resuming cleanup. Permission failures and unrelated conflicts still stop immediately.
+- Clarify recovery of tainted resources after failed applies and partial deletion.
+
 ## 0.12.2
 
 - Preserve generated identifier URIs and registration defaults when enabling waiting on an existing pending request.

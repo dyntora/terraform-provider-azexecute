@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
+
+func TestApplicationDeletionCancelledWhilePendingRetainsState(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprint(legacy), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.WriteHeader(http.StatusConflict)
+				fmt.Fprint(w, `{"code":"directory_deletion_unconfirmed"}`)
+				cancel()
+			}))
+			defer server.Close()
+			api, _ := azclient.New(server.URL, "scope", "token", nil, time.Second)
+			s := managedApplicationSchema(legacy)
+			state := tfsdk.State{Schema: s, Raw: tftypes.NewValue(s.Type().TerraformType(ctx), nil)}
+			if d := state.SetAttribute(ctx, path.Root("id"), "stable"); d.HasError() {
+				t.Fatal(d)
+			}
+			response := resource.DeleteResponse{State: state}
+			if legacy {
+				(&applicationResource{client: api}).Delete(ctx, resource.DeleteRequest{State: state}, &response)
+			} else {
+				(&applicationRequestResource{client: api}).Delete(ctx, resource.DeleteRequest{State: state}, &response)
+			}
+			if !response.Diagnostics.HasError() || !response.State.Raw.Equal(state.Raw) {
+				t.Fatalf("cancelled cleanup must retain its original identity and state: %v", response.Diagnostics)
+			}
+		})
+	}
+}
 
 func TestApplicationDeletionAndRefreshPreserveGraphFailures(t *testing.T) {
 	for _, legacy := range []bool{false, true} {

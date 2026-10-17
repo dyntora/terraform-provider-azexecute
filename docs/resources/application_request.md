@@ -535,12 +535,15 @@ Destroy cancels a pending or rejected request without requiring application
 deletion. Destroying a provisioned or automatically provisioning application
 requires **Allow Application Deletion** in the tenant Terraform settings.
 
-Provider **0.12.1** and its matching server update retain Terraform state on
-directory failures and confirm deletion before retiring the request. Destroy
-uses the same lease as provisioning; if creation is running, wait and retry.
-After a timeout, permission error, or directory-propagation conflict, restore
-access if needed and run `terraform destroy` again. The request and resource
-references remain available for cleanup.
+Destroy retains Terraform state on directory failures and confirms deletion
+before retiring the request. Provider **0.12.3** waits up to five minutes when
+AZExecute explicitly reports unconfirmed directory deletion or an operation
+already in progress. Cleanup uses the same lease as provisioning and retries
+the same resource. Permission failures and other conflicts stop immediately.
+After a timeout or failure, restore access if needed, review a fresh plan, and
+retry the intended apply or destroy. The request and resource references remain
+available for cleanup. See [deletion recovery](../guides/troubleshooting.md#deletion-is-waiting-for-entra)
+before changing tainted state after a failed apply.
 
 A missing local application record is not proof of Entra deletion. Refresh
 checks Entra and reports `NeedsAttention` for live orphaned resources, including

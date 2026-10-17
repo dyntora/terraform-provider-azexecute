@@ -174,6 +174,11 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 					}
 				case "DELETE":
 					deletes++
+					if deletes == 1 {
+						w.WriteHeader(http.StatusConflict)
+						fmt.Fprint(w, `{"code":"directory_deletion_unconfirmed","detail":"Entra deletion is not yet confirmed."}`)
+						return
+					}
 					app = azclient.Application{}
 					w.WriteHeader(http.StatusNoContent)
 					return
@@ -412,11 +417,21 @@ resource %q "test" {
 				t.Error("import replaced application")
 			}
 			mu.Unlock()
+			// A prior failed creation can leave Terraform's taint mark. Its
+			// replacement must finish delayed cleanup before creating a new ID.
+			run("taint", "-no-color", resourceType+".test")
+			run("apply", "-auto-approve", "-input=false", "-no-color")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if creates != 2 || deletes != 2 || app.ResourceID == originalID {
+				t.Errorf("tainted replacement did not resume cleanup: creates=%d deletes=%d id=%s", creates, deletes, app.ResourceID)
+			}
+			mu.Unlock()
 			run("destroy", "-auto-approve", "-input=false", "-no-color")
 			run("destroy", "-auto-approve", "-input=false", "-no-color")
 			mu.Lock()
-			if deletes != 1 {
-				t.Errorf("expected exactly one delete, got %d", deletes)
+			if deletes != 3 {
+				t.Errorf("expected two replacement cleanup attempts and one final deletion, got %d attempts", deletes)
 			}
 			mu.Unlock()
 		})

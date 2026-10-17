@@ -32,6 +32,8 @@ Microsoft Graph behavior:
 | API discards metadata after an update | Useful field-level error; corrected API allows in-place recovery |
 | Import with API-permission request blocks | Original submission is recovered without recreating the application |
 | Destroy followed by another destroy | One deletion; subsequent destroy is a no-op |
+| Destroy encounters unconfirmed directory deletion | Cleanup retries the same resource and completes within the same Terraform run |
+| Replace a tainted resource while deletion is unconfirmed | Apply waits for cleanup, creates the replacement, and the next plan is empty |
 
 Additional provider tests cover cancellation/timeouts, rejection, stale registration
 reads, state upgrades, owner operations, capability restrictions, malformed API
@@ -47,7 +49,7 @@ Terraform CLI suite, `go vet`, formatting checks and Go race tests on Linux.
 
 The final local run passed the provider suite (including Terraform CLI 1.16.0),
 `go vet`, module integrity, formatting and release-documentation checks. The
-backend suite passed 5,167 tests, with two optional PostgreSQL integration tests
+backend suite passed 5,169 tests, with two optional PostgreSQL integration tests
 skipped. Local Windows race testing was unavailable because no C compiler was
 installed; the Linux release workflow must pass its race test before publishing.
 
@@ -84,7 +86,9 @@ identity with the required AZExecute role and application access.
   an arbitrary Entra client/object ID. The updated import requires the API's
   original permission-submission response; older APIs produce upgrade guidance.
 - Destruction requires applicable tenant policy and access. Directory failures
-  retain state and require retry/recovery; they must not be hidden as success.
+  retain state. Explicit pending-deletion and operation-in-progress responses
+  are retried for up to five minutes; timeout or other failures require
+  retry/recovery and are not hidden as success.
 - A failed create can be tainted by Terraform even when the application exists.
   After fixing the underlying failure, inspect the plan and reconcile/import the
   existing resource before approving replacement. Metadata errors alone are not

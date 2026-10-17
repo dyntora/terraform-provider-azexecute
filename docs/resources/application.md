@@ -369,6 +369,12 @@ Destroying a provisioned or automatically provisioning application requires
 **Allow Application Deletion** in the tenant Terraform settings. The API
 enforces this policy on every request.
 
+Provider **0.12.3** waits up to five minutes for explicitly reported pending
+directory deletion or an existing provisioning/cleanup operation. It retains
+state until deletion is confirmed. Permission failures and other conflicts stop
+immediately. After a timeout, review a fresh plan and retry the intended operation
+to resume cleanup. See [deletion recovery](../guides/troubleshooting.md#deletion-is-waiting-for-entra).
+
 ## Move to the Recommended Resource
 
 Provider `0.5` supports a state-preserving cross-resource move:
