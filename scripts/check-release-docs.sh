@@ -87,6 +87,7 @@ capability_fields=(
   id api_version supports_registration_requests enabled allow_application_creation allow_application_deletion
   allow_api_permission_requests allow_registration_configuration
   use_application_request_flow use_api_permission_request_flow
+  auto_approve_delegated_permissions grant_admin_consent_for_delegated_permissions
   included_metadata_fields required_metadata_fields
 )
 

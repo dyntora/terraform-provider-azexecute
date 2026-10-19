@@ -54,9 +54,14 @@ This data source has no arguments.
   the supported registration settings.
 - `use_application_request_flow` (Boolean) â€” whether application creation needs
   normal AZExecute administrative approval.
-- `use_api_permission_request_flow` (Boolean) â€” whether permission requests use
-  the normal approval flow. When false, supported permission requests can be
-  applied automatically using tenant-admin authority.
+- `use_api_permission_request_flow` (Boolean) — whether application permissions
+  and authorized-client requests require review. Delegated scopes use the policies below.
+- `auto_approve_delegated_permissions` (Boolean) — whether Terraform delegated
+  requests can be approved automatically when every scope is enabled and defined
+  as user-consentable. Null when the server does not expose this policy.
+- `grant_admin_consent_for_delegated_permissions` (Boolean) — whether approved,
+  eligible Terraform delegated scopes receive tenant-wide consent. This is
+  independent of automatic approval. Null when the server does not expose this policy.
 - `included_metadata_fields` (Set of String) — metadata fields visible in tenant
   forms, using provider argument names. Visibility does not prohibit storing valid
   values with an API advertising `preserves_hidden_metadata`.

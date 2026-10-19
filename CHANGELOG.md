@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.5
+
+- Expose `auto_approve_delegated_permissions` and `grant_admin_consent_for_delegated_permissions` through `azexecute_capabilities`, so modules can inspect delegated approval and tenant-wide consent policies independently.
+- Return null for these capabilities when connected to an older server that does not expose them, rather than assuming a policy value.
+- Clarify which permission types use the Terraform approval-flow setting, how administrators can resume eligible requests waiting for consent, and how registration preauthorization differs from outgoing permission requests.
+
 ## 0.12.4
 
 - Remove enabled app roles and exposed scopes in one in-place apply, automatically disabling definitions before removal and preserving the application identity.

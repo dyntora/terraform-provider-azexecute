@@ -83,10 +83,25 @@ not silently recreated on every plan.
 `api_permission_request` blocks are submitted with the application request.
 Their behavior is controlled separately:
 
-- with the Terraform permission approval flow enabled, they become normal
-  AZExecute permission requests for review;
-- with it disabled, supported permissions are applied automatically using the
-  tenant administrator's configured authority.
+- application permissions and authorized-client requests follow the Terraform
+  permission approval flow: enabled requires review; disabled applies supported
+  requests automatically using the tenant's configured authority;
+- delegated permissions use **Auto-approve Terraform delegated permissions**.
+  This is off by default and only permits automatic approval when every requested
+  scope is enabled and allows user consent. Scopes requiring admin consent always
+  need review, even when the general Terraform permission approval flow is disabled;
+- **Grant admin consent for eligible Terraform delegated permissions** separately
+  controls consent on behalf of all users for approved user-consent scopes.
+  After manual approval of a mixed external API request, this grants the eligible
+  scopes while leaving admin-required scopes awaiting separate consent. The
+  request completes consent verification only when every requested scope is granted.
+  It is off by default and applies to both automatic and reviewed approvals.
+  Requests wait for admin consent if the consent helper is unavailable.
+
+Normal external-API approval and consent settings do not apply to Terraform.
+These are tenant settings; the provider cannot override them. Tenants that
+previously disabled the permission approval flow must enable the delegated
+auto-approval option explicitly to retain automatic approval for eligible scopes.
 
 Application readiness does not necessarily mean every permission request has
 already received consent. Review permission status in AZExecute when the tenant
@@ -144,3 +159,22 @@ planning when application approval is enabled and tells the caller to use
 - `create_timeout_minutes`: `1`–`1440`, default `60`.
 
 Use it only when the tenant contract guarantees automatic provisioning.
+
+
+### Inspecting delegated policy and recovery
+
+The `azexecute_capabilities` data source exposes
+`auto_approve_delegated_permissions` and
+`grant_admin_consent_for_delegated_permissions` independently. A null value means
+the connected server does not expose the policy; do not interpret it as enabled.
+Application readiness and each API-permission request's status remain separate.
+
+If an eligible request is waiting for the consent helper, an administrator can
+use **Verify consent** in AZExecute after the helper becomes ready. Recovery uses
+the current Terraform consent policy and the API's current scope definitions;
+admin-required scopes still need the administrator consent process.
+
+Registration configuration includes managing an API's pre-authorized clients.
+This is an API-owner authorization operation, separate from outgoing
+`api_permission_request` approval. Enabling registration configuration permits
+that operation for the managed registration.

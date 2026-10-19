@@ -7,8 +7,10 @@ description: |-
 
 # Application deployment validation
 
-Version 0.12.4 has local regression coverage for the application lifecycle,
-including role and scope removal. These checks have not been run against a live
+Version 0.12.5 adds regression coverage for independent delegated approval and
+consent capabilities, including compatibility with older servers. It retains
+the application lifecycle coverage from 0.12.4, including role and scope removal.
+These checks have not been run against a live
 Entra tenant; the live-tenant scenarios below remain to be verified.
 
 ## Verified locally
@@ -48,11 +50,15 @@ for metadata, registration settings, ownership, original permission submissions
 and downstream permission status. The release and pull-request workflows run the
 Terraform CLI suite, `go vet`, formatting checks and Go race tests on Linux.
 
-The final local run passed the provider suite (including Terraform CLI 1.16.0),
+The 0.12.4 local run passed the provider suite (including Terraform CLI 1.16.0),
 `go vet`, module integrity, formatting and release-documentation checks. The
 backend suite passed 5,184 tests, with two optional PostgreSQL integration tests
 skipped. Local Windows race testing was unavailable because no C compiler was
 installed; the Linux release workflow must pass its race test before publishing.
+
+For 0.12.5, the full Go provider suite passed. The affected .NET suites passed
+6,570 tests, with two optional PostgreSQL integration tests skipped. This run
+did not repeat the Terraform CLI or race checks; release CI must run them.
 
 Application and individual-owner refresh retain state on unqualified 404s and
 malformed responses. Delete requires confirmed HTTP 204 completion. Owner reads
