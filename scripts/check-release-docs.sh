@@ -25,6 +25,10 @@ required_files=(
   docs/resources/application_request.md
   docs/resources/application_owner.md
   docs/resources/event_listener.md
+  docs/resources/azgroup.md
+  docs/resources/azgroup_membership.md
+  docs/data-sources/azgroup.md
+  docs/data-sources/group_capabilities.md
   docs/data-sources/application.md
   docs/data-sources/capabilities.md
   docs/guides/getting-started.md
@@ -41,6 +45,8 @@ required_files=(
   examples/resources/azexecute_application_request/resource.tf
   examples/resources/azexecute_application_owner/resource.tf
   examples/resources/azexecute_event_listener/resource.tf
+  examples/resources/azexecute_azgroup/resource.tf
+  examples/resources/azexecute_azgroup_membership/resource.tf
 )
 
 for file in "${required_files[@]}"; do

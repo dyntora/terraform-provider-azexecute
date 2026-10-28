@@ -134,11 +134,11 @@ func envBool(names ...string) bool {
 }
 
 func (p *azexecuteProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewEventListenerResource}
+	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewEventListenerResource, NewAZGroupResource, NewAZGroupMembershipResource}
 }
 
 func (p *azexecuteProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{NewCapabilitiesDataSource, NewApplicationDataSource}
+	return []func() datasource.DataSource{NewCapabilitiesDataSource, NewApplicationDataSource, NewAZGroupDataSource, NewGroupCapabilitiesDataSource}
 }
 
 func stringValue(value types.String, environment, fallback string) string {

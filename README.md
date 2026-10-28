@@ -21,12 +21,15 @@ The provider supports:
 - full registration configuration included in requests and provisioned after approval;
 - import, drift reads, state-preserving migration, and controlled deletion;
 - tenant-capability and application data sources;
+- local and tenant-governed Entra groups, individual group memberships, group lookup, and group-policy data sources;
 - OIDC, certificate, secret, managed-identity, developer, and static-token
   authentication.
 
-Terraform does not elevate the caller or bypass approval. `User` identities can
+Terraform does not elevate the caller or bypass approval. For applications, `User` identities can
 manage only the Terraform resources they created. `Operator` and `TenantAdmin`
 identities can manage Terraform resources throughout their AZExecute tenant.
+
+Group resources require group ownership or TenantAdmin; Operator does not bypass group ownership. Entra groups are retained on destroy unless directory deletion is explicitly enabled for a Terraform-created group and performed by TenantAdmin.
 
 Provider `0.10` also includes [`azexecute_event_listener`](docs/resources/event_listener.md):
 application-specific or explicit broad listeners, automation inputs, protected credential
@@ -48,6 +51,10 @@ The complete Registry-facing documentation is maintained with the provider:
 - [`azexecute_application`](docs/resources/application.md)
 - [`azexecute_application_owner`](docs/resources/application_owner.md)
 - [`azexecute_event_listener`](docs/resources/event_listener.md)
+- [`azexecute_azgroup`](docs/resources/azgroup.md)
+- [`azexecute_azgroup_membership`](docs/resources/azgroup_membership.md)
+- [`azexecute_azgroup` data source](docs/data-sources/azgroup.md)
+- [`azexecute_group_capabilities`](docs/data-sources/group_capabilities.md)
 - [`azexecute_capabilities`](docs/data-sources/capabilities.md)
 - [`azexecute_application` data source](docs/data-sources/application.md)
 - [Upgrade and state migration](docs/guides/migration-v0.5.md)
@@ -66,7 +73,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.12"
+      version = "~> 0.13"
     }
   }
 }

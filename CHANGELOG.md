@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0
+
+- Add `azexecute_azgroup` for local groups and Entra groups created under tenant group policy, with import, metadata updates, and drift reads.
+- Retain Entra groups by default on destroy. Allow explicit deletion of Terraform-created Entra groups by a tenant administrator.
+- Add `azexecute_azgroup_membership` for individual user, application, integration, and machine assignments without replacing other memberships.
+- Add `azexecute_azgroup` and `azexecute_group_capabilities` data sources for existing groups and caller-specific creation policy.
+- Preserve recovery identities and Terraform state when directory operations are unconfirmed or access is revoked.
+
 ## 0.12.5
 
 - Expose `auto_approve_delegated_permissions` and `grant_admin_consent_for_delegated_permissions` through `azexecute_capabilities`, so modules can inspect delegated approval and tenant-wide consent policies independently.

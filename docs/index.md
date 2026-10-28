@@ -1,7 +1,7 @@
 ---
 page_title: "Provider: AZExecute"
 description: |-
-  Creates and manages governed Microsoft Entra application registrations through AZExecute.
+  Manages governed application registrations, AZExecute groups, and event listeners.
 ---
 
 # AZExecute Provider
@@ -18,6 +18,8 @@ checked against the current tenant settings.
 
 ## Choose a Resource
 
+- Use [`azexecute_azgroup`](resources/azgroup.md) for local AZExecute groups or Entra groups created under the tenant's group policy. Use [`azexecute_azgroup_membership`](resources/azgroup_membership.md) for individual assignments.
+- Read [`azexecute_group_capabilities`](data-sources/group_capabilities.md) before choosing a group source, or look up an existing group with [`azexecute_azgroup`](data-sources/azgroup.md).
 - Use [`azexecute_event_listener`](resources/event_listener.md) to run an existing automation task when an application event occurs, including protected secret/certificate renewal mappings. Multiple listeners per application are supported.
 
 For new application configurations, use
@@ -52,7 +54,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.12"
+      version = "~> 0.13"
     }
   }
 }
@@ -84,15 +86,19 @@ Before running Terraform, a tenant administrator must:
 
 1. Enable the Terraform API under **Tenant administration → Application
    Configuration → Terraform**.
-2. Enable application creation.
+2. Enable application creation if managing applications. For groups, configure the existing group-creation settings instead.
 3. Enable registration configuration and API-permission requests only when the
    Terraform configuration uses those features.
 4. Decide whether application and permission requests use their approval flows.
 5. Assign the calling user or service principal an AZExecute enterprise
    application role.
 
-`User` can manage only Terraform resources created by that identity.
-`Operator` and `TenantAdmin` can manage Terraform resources across the tenant.
+For application resources, `User` can manage only Terraform resources created by that identity.
+`Operator` and `TenantAdmin` can manage application resources across the tenant.
+Groups require an active group owner or `TenantAdmin`; `Operator` alone does not grant group ownership.
+Entra group creation requires the tenant's Entra group-creation setting and a writable Entra integration.
+Entra groups are retained on destroy by default. Directory deletion requires an applied explicit opt-in,
+a tenant administrator, and a group created by that Terraform resource; imported groups remain protected.
 Application deletion is required only when destroying a provisioned
 application; cancelling a pending or rejected request does not require it.
 
