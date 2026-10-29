@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.7
+
+- Correct documentation for in-place permission changes, confirmed deletion, and recovery after failed creation or timeouts.
+- Document supported lifecycle boundaries, retained approved permissions, and differences between Terraform and portal workflows.
+- Complete the provider navigation for all resources and data sources, and fix text encoding in integration references.
+- No provider runtime behavior changes from 0.13.6.
+
 ## 0.13.6
 
 - Update `api_permission_request` in place on both application resources, preserving resource, request, client and object IDs. Permission changes no longer replace the application.

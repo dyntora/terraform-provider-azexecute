@@ -1,6 +1,8 @@
 # AZExecute Terraform Provider
 
-Provider **0.13.6** preserves application identity during permission changes and
+Provider **0.13.7** updates documentation for lifecycle behavior, recovery, and
+the complete supported resource and data-source surface. Runtime behavior is unchanged
+from 0.13.6, which preserves application identity during permission changes and
 hardens refresh, update, and deletion recovery across groups, listeners, and integrations.
 Ambiguous API responses retain state and report an error instead of assuming a resource is gone.
 
@@ -26,6 +28,7 @@ The provider supports:
 - import, drift reads, state-preserving migration, and controlled deletion;
 - tenant-capability and application data sources;
 - local and tenant-governed Entra groups, individual group memberships, group lookup, and group-policy data sources;
+- AWS, Vercel, and GitHub connections, connection lookups, and AWS federation trust inputs;
 - OIDC, certificate, secret, managed-identity, developer, and static-token
   authentication.
 
@@ -61,6 +64,12 @@ The complete Registry-facing documentation is maintained with the provider:
 - [`azexecute_group_capabilities`](docs/data-sources/group_capabilities.md)
 - [`azexecute_capabilities`](docs/data-sources/capabilities.md)
 - [`azexecute_application` data source](docs/data-sources/application.md)
+- [Integration workflows](docs/guides/integrations.md)
+- [`azexecute_aws_integration`](docs/resources/aws_integration.md) and its [data source](docs/data-sources/aws_integration.md)
+- [`azexecute_vercel_integration`](docs/resources/vercel_integration.md) and its [data source](docs/data-sources/vercel_integration.md)
+- [`azexecute_github_integration`](docs/resources/github_integration.md) and its [data source](docs/data-sources/github_integration.md)
+- [`azexecute_aws_federation`](docs/data-sources/aws_federation.md)
+- [Lifecycle boundaries](docs/index.md#lifecycle-boundaries)
 - [Upgrade and state migration](docs/guides/migration-v0.5.md)
 - [Troubleshooting](docs/guides/troubleshooting.md)
 - [Application deployment validation and release checks](docs/guides/application-deployment-validation.md)
@@ -120,7 +129,9 @@ Optional request waiting requires provider 0.12.0 or later; it is not
 available in 0.11.7 or earlier. Waiting defaults to polling every 5 seconds for up
 to 60 minutes, includes human approval time and holds the Terraform state lock.
 Neither resource approves requests or bypasses tenant policy. Failures and
-timeouts retain the request identity. See the
+timeouts retain the request identity when available, but failed initial creation
+can taint the resource and cause a replacement plan. Inspect that plan before
+retrying; failed updates retain the existing application for reconciliation. See the
 [request reference](docs/resources/application_request.md) for configuration.
 
 ## Tenant Prerequisites

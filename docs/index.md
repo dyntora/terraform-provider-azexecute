@@ -1,16 +1,19 @@
 ---
 page_title: "Provider: AZExecute"
 description: |-
-  Manages governed application registrations, AZExecute groups, and event listeners.
+  Manages governed application registrations, groups, event listeners, and AWS, Vercel, and GitHub integrations.
 ---
 
 # AZExecute Provider
 
-The AZExecute provider manages the deliberately limited application-registration
-surface exposed by the AZExecute Terraform API. It creates governed application
+The AZExecute provider manages the supported application, group, and integration
+resources exposed by the AZExecute Terraform API. It creates governed application
 requests, tracks approval and provisioning, updates supported metadata and
 registration settings, creates API-permission requests, and reads the tenant's
 live Terraform policy. It also manages application event listeners through the shared public event API, using the same ownership and task-access checks as the application UI.
+
+Terraform uses AZExecute's governance and provisioning workflows, but does not
+expose every portal action. The supported resources and data sources are listed below.
 
 Terraform does not bypass AZExecute governance. The caller keeps its assigned
 AZExecute `User`, `Operator`, or `TenantAdmin` role, and every operation is
@@ -21,10 +24,16 @@ checked against the current tenant settings.
 - Use [`azexecute_azgroup`](resources/azgroup.md) for local AZExecute groups or Entra groups created under the tenant's group policy. Use [`azexecute_azgroup_membership`](resources/azgroup_membership.md) for individual assignments.
 - Read [`azexecute_group_capabilities`](data-sources/group_capabilities.md) before choosing a group source, or look up an existing group with [`azexecute_azgroup`](data-sources/azgroup.md).
 - Use [`azexecute_event_listener`](resources/event_listener.md) to run an existing automation task when an application event occurs, including protected secret/certificate renewal mappings. Multiple listeners per application are supported.
+- Use [`azexecute_application_owner`](resources/application_owner.md) for individual owners when the parent application's inline owner set is omitted.
+- Use [`azexecute_aws_integration`](resources/aws_integration.md), [`azexecute_vercel_integration`](resources/vercel_integration.md), or [`azexecute_github_integration`](resources/github_integration.md) to manage connections. The [integration guide](guides/integrations.md) explains credentials, federation, and group assignments.
+- Read existing connections with the [AWS](data-sources/aws_integration.md), [Vercel](data-sources/vercel_integration.md), and [GitHub](data-sources/github_integration.md) data sources. Read AWS trust inputs with [`azexecute_aws_federation`](data-sources/aws_federation.md).
+- Read an existing managed application with [`azexecute_application`](data-sources/application.md), and current application policy with [`azexecute_capabilities`](data-sources/capabilities.md).
 
 For new application configurations, use
 [`azexecute_application_request`](resources/application_request.md). Both application
-resources use the same AZExecute request and provisioning flow.
+resources use the same AZExecute request and provisioning flow. Use
+[`azexecute_application`](resources/application.md) only when the tenant permits
+automatic provisioning and creation should always wait for it.
 
 | Behavior | `azexecute_application` | `azexecute_application_request` (recommended) |
 | --- | --- | --- |
@@ -39,11 +48,41 @@ Optional request waiting requires provider 0.12.0 or later; it is not
 available in 0.11.7 or earlier. When enabled, waiting includes approval time and
 holds the Terraform state lock. Defaults are a 5-second poll interval and a
 60-minute timeout. Neither resource approves requests or bypasses tenant policy.
-Failures and timeouts retain the request identity.
+Failures and timeouts retain the request identity when available. An error during
+initial creation can taint the resource, causing Terraform to plan cleanup and
+replacement; inspect the plan before retrying. Failed updates retain the existing
+application for reconciliation.
 
 See the [approval workflow guide](guides/approval-workflows.md) for the complete
 lifecycle and the [getting started guide](guides/getting-started.md) for a
 minimal working configuration.
+
+## Lifecycle Boundaries
+
+- Name, description, metadata, supported registration settings, and permission-request
+  changes update a ready application in place. Unsupported changes fail with a
+  diagnostic instead of forcing application replacement. Explicit destroy,
+  taint/replacement, or recreation after confirmed deletion can generate a new client ID.
+- Permission blocks manage requests. Removing a pending request cancels it when
+  allowed; already approved access is retained with a warning. Terraform does not
+  revoke those grants or continuously reconcile consent changed outside Terraform.
+  `Ready` describes application provisioning, not downstream permission approval.
+- Approval, consent verification, and recovery requiring an administrator remain
+  AZExecute actions. Use optional waiting when downstream resources need provisioned IDs.
+- Application import recovers an existing AZExecute Terraform resource; it cannot
+  adopt an arbitrary Entra registration. Groups and integrations also support adoption
+  by numeric AZExecute ID under their documented access rules.
+- Configured fields are reconciled according to each resource's ownership rules.
+  Inline owner sets are authoritative; individual owner resources must not be combined
+  with them. Omitted registration fields remain unmanaged. Integration credentials
+  are not returned by the API, so refresh cannot detect external credential rotation.
+- Normal destroy remains supported under tenant policy. Entra groups are retained
+  by default as described below. Deleting an integration deletes its AZExecute
+  connection, not the external account, team, GitHub App, or IAM role.
+
+Creating integration connections and group assignments does not configure an
+application's secret destinations or create automation tasks. Event listeners
+reference existing tasks or TOPdesk integrations; those definitions are managed separately.
 
 ## Example Usage
 

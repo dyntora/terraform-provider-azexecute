@@ -92,7 +92,7 @@ resource_fields=(
   user_consent_display_name user_consent_description delegated_permission_ids
   is_enabled allow_users_and_groups
   allow_applications status status_reason request_id
-  application_entity_id application_id application_object_id
+  application_entity_id application_id application_object_id permission_requests_pending
   api_permission_request target_type target_application_entity_id
   target_external_api_app_id target_external_api_display_name grant_type
   justification permission value requires_admin_consent
@@ -101,6 +101,7 @@ resource_fields=(
 capability_fields=(
   preserves_hidden_metadata
   supports_application_details_updates
+  supports_permission_request_updates
   minimum_additional_owners
   id api_version supports_registration_requests enabled allow_application_creation allow_application_deletion
   allow_api_permission_requests allow_registration_configuration

@@ -21,7 +21,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.13.6"
+      version = "~> 0.13.7"
     }
     aws = {
       source  = "hashicorp/aws"
@@ -128,7 +128,7 @@ resource "azexecute_azgroup_membership" "aws" {
 }
 ```
 
-Waiting allows Terraform to use `application_entity_id` once provisioning reaches `Ready`. It does not grant approval. Human approval must still occur within the configured completion timeout; otherwise approve the retained request and rerun apply. The default group source follows tenant group policy.
+Waiting allows Terraform to use `application_entity_id` once provisioning reaches `Ready`. It does not grant approval. Human approval must still occur within the configured completion timeout. A timeout during initial creation can taint the retained resource; after approval, inspect a fresh plan and follow the [recovery guidance](troubleshooting.md#deletion-is-waiting-for-entra) before applying so an existing application is not unintentionally replaced. The default group source follows tenant group policy.
 
 The group links make the integration available according to AZExecute access rules. They do not configure an application's secret destinations, Vercel environment variables, or GitHub workflow actions automatically. Configure those application settings separately.
 

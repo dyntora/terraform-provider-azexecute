@@ -36,7 +36,7 @@ The group can be a resource or an existing `azexecute_azgroup` data source. Crea
 
 | Argument | Description |
 | --- | --- |
-| `name` | Required friendly name, 1–200 characters, without surrounding whitespace or control characters. |
+| `name` | Required friendly name, 1â€“200 characters, without surrounding whitespace or control characters. |
 | `description` | Optional description, maximum 1000 characters. |
 | `notes` | Optional notes, maximum 2000 characters. |
 | `enabled` | Optional boolean, default `true`. |

@@ -39,7 +39,8 @@ Microsoft Graph behavior:
 | Owner and app-role drift | Apply restores configured values; subsequent plan is empty |
 | UUID casing, trimmed justification, empty optional strings and URI sets | Equivalent representations do not cause inconsistent-state errors |
 | API discards metadata after an update | Useful field-level error; corrected API allows in-place recovery |
-| Import with API-permission request blocks | Original submission is recovered without recreating the application |
+| Import with API-permission request blocks | Current managed requests are recovered without recreating the application |
+| Add/remove permissions or retry an interrupted permission update | Reconciles in place with stable application IDs and a clean subsequent plan |
 | Destroy followed by another destroy | One deletion; subsequent destroy is a no-op |
 | Destroy encounters unconfirmed directory deletion | Cleanup retries the same resource and completes within the same Terraform run |
 | Replace a tainted resource while deletion is unconfirmed | Apply waits for cleanup, creates the replacement, and the next plan is empty |
@@ -100,7 +101,7 @@ identity with the required AZExecute role and application access.
   permission approval or admin-consent operation.
 - Import takes an existing AZExecute Terraform resource UUID. It does not adopt
   an arbitrary Entra client/object ID. The updated import requires the API's
-  original permission-submission response; older APIs produce upgrade guidance.
+  current managed permission-request response; older APIs produce upgrade guidance.
 - Destruction requires applicable tenant policy and access. Directory failures
   retain state. Explicit pending-deletion and operation-in-progress responses
   are retried for up to five minutes; timeout or other failures require

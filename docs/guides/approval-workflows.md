@@ -53,7 +53,11 @@ state lock. It never grants approval or waits for downstream API consent.
 - `create_timeout_minutes`: `1`–`1440`, default `60`, including approval time.
 
 `Ready` completes the wait. `NeedsAttention` and `Rejected` stop it with an error
-containing `status_reason`. Failures and timeouts retain the request identity.
+containing `status_reason`. Failures and timeouts retain the request identity when
+available, but an error during initial creation can taint the resource and cause
+Terraform to plan cleanup and replacement. After approval or recovery, inspect a
+fresh plan before applying; see [tainted creation recovery](troubleshooting.md#deletion-is-waiting-for-entra).
+Failed updates retain the existing application for retry.
 With waiting disabled, a later refresh reports a warning for these failed outcomes.
 An already finished Terraform command cannot receive a later background failure.
 
@@ -106,6 +110,19 @@ auto-approval option explicitly to retain automatic approval for eligible scopes
 Application readiness does not necessarily mean every permission request has
 already received consent. Review permission status in AZExecute when the tenant
 uses its approval flow.
+
+With provider 0.13.6 and an API exposing `supports_permission_request_updates`,
+permission blocks can be added, changed, or removed on a ready application without
+changing its client ID. Changes still use the same request approval policies.
+Removed pending requests are cancelled when allowed; already approved access is
+retained with a warning and must be reviewed separately if revocation is desired.
+The blocks represent managed requests, not authoritative live grants. External
+consent changes are not automatically repaired by Terraform.
+
+`permission_requests_pending` reports an interrupted configuration update, not
+pending human approval. Refresh and apply reconcile that update, including when
+configuration is reverted to its previous value. A pending or rejected application
+request must become ready before its permission configuration can be updated.
 
 ## Registration Configuration
 

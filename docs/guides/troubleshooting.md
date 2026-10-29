@@ -12,7 +12,10 @@ description: |-
 Use provider `0.11.7` or later. Description and
 display-name edits now update a ready application in place; other metadata such
 as department and project already supports in-place changes. Check the complete
-plan for other replacement triggers, including changes to `api_permission_request`.
+plan for explicit replacement or a tainted resource. Provider `0.13.6` also updates
+`api_permission_request` in place when the API reports
+`supports_permission_request_updates`. Older APIs produce an upgrade diagnostic;
+the provider does not replace the application to perform an unsupported update.
 
 The provider requires `supports_application_details_updates` for name/description
 edits. If AZExecute reports that these edits are unsupported, contact support;

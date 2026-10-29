@@ -94,6 +94,6 @@ Optional fields (server defaults are read back when omitted): `operation_type`, 
 terraform import azexecute_event_listener.deploy_secret 123
 ```
 
-Import adopts the visible listener configuration. A 404 removes it from state; permission and other errors are reported. Application owners cannot import operator-managed rules.
+Import adopts the visible listener configuration. Only an explicit listener-absence response removes it from state; plain 404s, permission errors, and other failures retain state and report diagnostics. Application owners cannot import operator-managed rules.
 
 Create requests are deliberately not retried automatically. If a response is lost, check the application’s listeners and import the created listener before another apply to avoid duplicate automation. Deleting a listener stops future triggers; it does not cancel runs already created.
