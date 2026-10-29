@@ -2,8 +2,10 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // EventListener contains configuration and authorization metadata, never runtime credential values.
@@ -38,19 +40,33 @@ func (c *Client) CreateEventListener(ctx context.Context, request EventListener)
 	request.ID = 0
 	request.AuthorizedByUserID = nil
 	var result EventListener
-	return &result, c.doWithRetry(ctx, http.MethodPost, "api/v1/EventListeners", request, &result, false)
+	err := c.doWithRetry(ctx, http.MethodPost, "api/v1/EventListeners", request, &result, false)
+	return &result, validateEventListenerResponse(result, 0, err)
 }
 
 func (c *Client) GetEventListener(ctx context.Context, id int64) (*EventListener, error) {
 	var result EventListener
-	return &result, c.do(ctx, http.MethodGet, eventListenerPath(id), nil, &result)
+	err := c.do(ctx, http.MethodGet, eventListenerPath(id), nil, &result)
+	return &result, validateEventListenerResponse(result, id, err)
 }
 
 func (c *Client) UpdateEventListener(ctx context.Context, id int64, request EventListener) (*EventListener, error) {
 	request.ID = 0
 	request.AuthorizedByUserID = nil
 	var result EventListener
-	return &result, c.do(ctx, http.MethodPut, eventListenerPath(id), request, &result)
+	err := c.do(ctx, http.MethodPut, eventListenerPath(id), request, &result)
+	return &result, validateEventListenerResponse(result, id, err)
+}
+
+func validateEventListenerResponse(result EventListener, expectedID int64, err error) error {
+	if err != nil {
+		return err
+	}
+	if result.ID <= 0 || (expectedID > 0 && result.ID != expectedID) || strings.TrimSpace(result.Name) == "" || strings.TrimSpace(result.EventType) == "" ||
+		(result.ActionType != "AutomationTask" && result.ActionType != "TopdeskCreateIncident") {
+		return fmt.Errorf("AZExecute returned an incomplete or mismatched event listener; existing Terraform state is retained. Check the API deployment and retry")
+	}
+	return nil
 }
 
 func (c *Client) DeleteEventListener(ctx context.Context, id int64) error {

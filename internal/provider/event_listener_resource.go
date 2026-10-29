@@ -160,7 +160,7 @@ func (r *eventListenerResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 	result, err := r.client.GetEventListener(ctx, id)
-	if azclient.IsNotFound(err) {
+	if azclient.IsEventListenerNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -206,7 +206,7 @@ func (r *eventListenerResource) Delete(ctx context.Context, req resource.DeleteR
 		resp.Diagnostics.AddError("Invalid listener ID", err.Error())
 		return
 	}
-	if err := r.client.DeleteEventListener(ctx, id); err != nil && !azclient.IsNotFound(err) {
+	if err := r.client.DeleteEventListener(ctx, id); err != nil && !azclient.IsEventListenerNotFound(err) {
 		resp.Diagnostics.AddError("Unable to delete event listener", err.Error())
 	}
 }

@@ -39,13 +39,41 @@ resource "azexecute_application_request" "api" {
 These settings control waiting during create/update, not refresh. `Ready` means
 application provisioning completed; downstream API approval/consent remains separate.
 `NeedsAttention` and `Rejected` stop waiting immediately and report `status_reason`.
-Timeouts and failures retain the request identity in state. Without waiting, a later
+Timeouts and failures retain the request identity in state for recovery or cleanup.
+An error during initial creation can still taint the resource: Terraform may plan
+cleanup and replacement on the next apply. Failed updates retain the existing
+application for retry. Without waiting, a later
 refresh/plan reports a warning when a background request needs attention. An already
 finished Terraform command cannot receive a later background failure.
 
 The matching API update includes the failed request stage, safe Graph explanation
 and attempt reference in `status_reason`, even after automatic cleanup. Existing
 historical generic errors cannot be reconstructed from the stored request alone.
+
+## Updating outgoing permission requests
+
+On a ready application, additions and removals of `api_permission_request` update
+in place. Resource, creation-request, client and object IDs stay unchanged. Added
+permissions follow the tenant's permission approval and consent policies; `Ready`
+does not mean those permissions have been approved or consented.
+
+Removing permissions cancels affected pending requests. Retained permissions from
+a partially removed pending batch are resubmitted for review. A tenant administrator
+must cancel requests awaiting administrator consent. Already approved access is
+retained and Terraform warns about it; review and revoke consent separately in
+AZExecute if required. Unrelated requests and grants remain untouched.
+
+The API must advertise `supports_permission_request_updates`. Older APIs reject
+permission edits with upgrade guidance, without replacing the application. Upgrade
+the provider as well, discard older saved replacement plans, and generate a fresh
+plan. No resource rename or state migration is required. Changes before initial
+application approval/provisioning finishes still require that flow to complete.
+
+An interrupted permission update sets the computed `permission_requests_pending`
+flag. The next apply reconciles the current configuration in place, even if you
+reverted the configuration after the failure. A clean plan follows successful
+reconciliation. Unexpected changes or missing established application identifiers
+stop refresh/update with a diagnostic and preserve existing state.
 
 ## Example Usage
 
@@ -477,8 +505,8 @@ retain their normal registration update behavior and concurrency checks.
 ### Optional API-Permission Requests
 
 - `api_permission_request` (Set of Block) â€” API permissions requested during
-  application creation. The tenant must enable Terraform API-permission
-  requests. Changing this set replaces the application request/resource.
+  creation or subsequent updates. The tenant must enable Terraform API-permission
+  requests. Changes update in place; they never require application replacement.
 
 Each `api_permission_request` supports:
 
@@ -508,6 +536,8 @@ the tenant's separate Terraform permission-flow setting.
 
 ### Read-Only
 
+- `permission_requests_pending` (Boolean) — an earlier permission update needs reconciliation; this is separate from waiting for permission approval.
+
 - `id` (String) â€” stable provider-generated resource UUID used for idempotency
   and import.
 - `status` (String) â€” `PendingApproval`, `Provisioning`, `NeedsAttention`, `Ready`, or `Rejected`.
@@ -533,8 +563,8 @@ application entity ID. After import, run `terraform plan` and align the
 configuration with the imported state.
 
 Provider 0.12.2 requires an API that returns `requestedApiPermissions`
-when importing. It restores the original permission-request blocks so recovering
-state does not omit them and unexpectedly plan a replacement. Deploy the matching
+when importing. It restores the current managed permission-request blocks so recovering
+state does not omit them and unexpectedly change managed requests. Deploy the matching
 API before upgrading the provider. Import recovers existing AZExecute Terraform
 resources; it does not adopt arbitrary Entra registrations. Review the plan after
 import, including UUID spelling in permission blocks. Submitted permissions are

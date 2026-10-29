@@ -603,6 +603,7 @@ func managedApplicationSchemaV2(includeWaitSettings bool) schema.Schema {
 }
 
 func removeLegacyRequestWaitSettings(result *schema.Schema, synchronous bool) {
+	delete(result.Attributes, "permission_requests_pending")
 	if !synchronous {
 		delete(result.Attributes, "wait_for_completion")
 		delete(result.Attributes, "poll_interval_seconds")

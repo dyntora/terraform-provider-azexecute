@@ -23,7 +23,7 @@ resource "azexecute_application_request" "deployment" {
   configure_registration         = true
   sign_in_audience               = "AzureADMyOrg"
   web_redirect_uris              = ["https://platform.example.com/signin-oidc"]
-  web_enable_id_token_issuance    = true
+  web_enable_id_token_issuance   = true
   requested_access_token_version = 2
   identifier_uris                = ["api://{applicationId}"]
   app_roles = [{

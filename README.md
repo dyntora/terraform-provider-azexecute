@@ -1,7 +1,11 @@
 # AZExecute Terraform Provider
 
+Provider **0.13.6** preserves application identity during permission changes and
+hardens refresh, update, and deletion recovery across groups, listeners, and integrations.
+Ambiguous API responses retain state and report an error instead of assuming a resource is gone.
+
 The public `dyntora/azexecute` provider creates and manages governed Microsoft
-Entra application registrations through the dedicated AZExecute Terraform API.
+Entra application registrations, groups, and AWS, Vercel, and GitHub integrations through the dedicated AZExecute Terraform API.
 It respects the caller's AZExecute role and the tenant's live application,
 metadata, permission, registration, approval, and deletion settings on every
 operation.
@@ -187,3 +191,12 @@ For local Terraform testing, build the provider and configure a Terraform CLI
 `dev_overrides` entry as shown in [`.terraformrc.example`](.terraformrc.example).
 
 The provider is licensed under the Mozilla Public License 2.0.
+
+## Integrations
+
+Provider 0.13.5 adds AWS, Vercel, and GitHub connections with import, updates, and group linkage. Start with the [integration setup guide](docs/guides/integrations.md).
+
+- [`azexecute_aws_integration` resource](docs/resources/aws_integration.md) and [data source](docs/data-sources/aws_integration.md).
+- [`azexecute_vercel_integration` resource](docs/resources/vercel_integration.md) and [data source](docs/data-sources/vercel_integration.md).
+- [`azexecute_github_integration` resource](docs/resources/github_integration.md) and [data source](docs/data-sources/github_integration.md).
+- [`azexecute_aws_federation` data source](docs/data-sources/aws_federation.md).

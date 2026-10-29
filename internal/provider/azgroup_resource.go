@@ -109,6 +109,16 @@ func setGroupModel(m *azgroupModel, g *azclient.Group) {
 	m.Icon = types.StringPointerValue(g.Configuration.Icon)
 	m.DeleteEntraOnDestroy = types.BoolValue(g.Configuration.DeleteEntraOnDestroy)
 }
+
+func validateGroupIdentity(previous azgroupModel, current *azclient.Group) error {
+	if !previous.GroupID.IsNull() && !previous.GroupID.IsUnknown() && previous.GroupID.ValueInt64() > 0 && previous.GroupID.ValueInt64() != current.GroupID {
+		return fmt.Errorf("AZExecute returned a changed group ID for this resource; existing Terraform state is retained. Reconcile the API record before retrying")
+	}
+	if !previous.EntraObjectID.IsNull() && !previous.EntraObjectID.IsUnknown() && previous.EntraObjectID.ValueString() != "" && !strings.EqualFold(previous.EntraObjectID.ValueString(), pointerText(current.EntraObjectID)) {
+		return fmt.Errorf("AZExecute returned a missing or changed Entra group identity; existing Terraform state is retained")
+	}
+	return nil
+}
 func (r *azgroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var m azgroupModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
@@ -140,7 +150,7 @@ func (r *azgroupResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 	result, err := r.client.GetGroup(ctx, m.ID.ValueString())
-	if azclient.IsNotFound(err) {
+	if azclient.IsGroupNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -148,12 +158,18 @@ func (r *azgroupResource) Read(ctx context.Context, req resource.ReadRequest, re
 		resp.Diagnostics.AddError("Unable to read group", err.Error())
 		return
 	}
+	if err := validateGroupIdentity(m, result); err != nil {
+		resp.Diagnostics.AddError("Group identity changed unexpectedly", err.Error())
+		return
+	}
 	setGroupModel(&m, result)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &m)...)
 }
 func (r *azgroupResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var m azgroupModel
+	var previous azgroupModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &m)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &previous)...)
 	if resp.Diagnostics.HasError() || r.client == nil {
 		return
 	}
@@ -161,9 +177,21 @@ func (r *azgroupResource) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	result, err := r.client.UpdateGroup(ctx, m.ID.ValueString(), groupInput(m))
+	current, err := r.client.GetGroup(ctx, previous.ID.ValueString())
+	if err == nil {
+		err = validateGroupIdentity(previous, current)
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to verify group identity before update", err.Error())
+		return
+	}
+	result, err := r.client.UpdateGroup(ctx, previous.ID.ValueString(), groupInput(m))
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to update group", err.Error())
+		return
+	}
+	if err := validateGroupIdentity(previous, result); err != nil {
+		resp.Diagnostics.AddError("Group identity changed unexpectedly", err.Error())
 		return
 	}
 	setGroupModel(&m, result)
@@ -175,7 +203,7 @@ func (r *azgroupResource) Delete(ctx context.Context, req resource.DeleteRequest
 	if resp.Diagnostics.HasError() || r.client == nil {
 		return
 	}
-	if err := r.client.DeleteGroup(ctx, m.ID.ValueString()); err != nil && !azclient.IsNotFound(err) {
+	if err := r.client.DeleteGroup(ctx, m.ID.ValueString()); err != nil && !azclient.IsGroupNotFound(err) {
 		resp.Diagnostics.AddError("Unable to destroy group", err.Error())
 		return
 	}

@@ -7,6 +7,11 @@ description: |-
 
 # azexecute_event_listener (Resource)
 
+Provider 0.13.6 preserves state on lost access, plain 404s, incomplete responses,
+or changed listener IDs. Deletion requires HTTP 204 or an explicit listener-absence
+response. Upgrade older APIs if they cannot confirm absence; restore access before
+retrying an operation denied by authorization. Normal destroy remains supported.
+
 Manages one application event listener. Multiple resources may target the same application. Available from provider version 0.9.0. Task actions use existing tasks that the authenticated identity is permitted to execute.
 
 Application owners can manage self-service listeners using published User tasks or active User/Editor/Owner task grants to their user, tenant group, or User role. Viewer grants do not allow execution. Ownership and task access are checked again for future runs; approvals remain in force. Operator/TenantAdmin callers can also manage broad listeners and TOPdesk actions. Saving an owner rule as an operator makes it operator-managed. Use a stable authenticated identity for ongoing management; a service principal does not impersonate a human owner.

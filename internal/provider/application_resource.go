@@ -31,6 +31,7 @@ var _ resource.ResourceWithUpgradeState = &applicationResource{}
 type applicationResource struct{ client *azclient.Client }
 
 type applicationResourceModel struct {
+	PermissionRequestsPending        types.Bool   `tfsdk:"permission_requests_pending"`
 	ID                               types.String `tfsdk:"id"`
 	DisplayName                      types.String `tfsdk:"display_name"`
 	Description                      types.String `tfsdk:"description"`
@@ -121,6 +122,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 		Version:     3,
 		Description: "Creates an AZExecute-governed Microsoft Entra application registration in tenants configured for automatic provisioning.",
 		Attributes: map[string]schema.Attribute{
+			"permission_requests_pending":        schema.BoolAttribute{Computed: true, Description: "An interrupted permission update needs reconciliation. The next apply resumes it in place, including when configuration has been reverted."},
 			"id":                                 schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Stable Terraform resource UUID used for API idempotency."},
 			"display_name":                       schema.StringAttribute{Required: true},
 			"description":                        schema.StringAttribute{Optional: true},
@@ -177,8 +179,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 		},
 		Blocks: map[string]schema.Block{
 			"api_permission_request": schema.SetNestedBlock{
-				Description:   "API permissions requested as part of application provisioning. Changes replace the resource.",
-				PlanModifiers: []planmodifier.Set{setplanmodifier.RequiresReplace()},
+				Description: "API permission requests for this application. Changes are submitted in place and preserve the application identity; approval and consent remain subject to tenant policy.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"target_type":                      schema.StringAttribute{Required: true, Description: "ExternalApi or InternalApplication."},
@@ -261,9 +262,8 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 	// generated for this provider invocation.
 	resourceID = result.ResourceID
 	desired := plan
-	// Persist the server's stable identity before waiting. Terraform can then resume the
-	// same request after cancellation, timeout, or a provider crash instead of creating
-	// a second application.
+	// Persist the server's stable identity before waiting so Terraform can clean
+	// up a failed creation. A Create error can taint this state for replacement.
 	mapApplicationToModel(ctx, result, &plan, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
 		return
@@ -290,7 +290,7 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 			return
 		}
 		if time.Now().After(deadline) {
-			response.Diagnostics.AddError("Application creation timed out", "AZExecute is still provisioning the application. Increase create_timeout_minutes and apply again; the API resource ID makes the retry idempotent.")
+			response.Diagnostics.AddError("Application creation timed out", "AZExecute is still provisioning the application. Terraform may mark this failed creation for cleanup and replacement. Review the next plan; increase create_timeout_minutes for subsequent creations.")
 			return
 		}
 		tflog.Info(ctx, "Waiting for AZExecute application", map[string]any{"resource_id": resourceID, "status": result.Status})
@@ -300,11 +300,16 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 			return
 		case <-time.After(time.Duration(pollSeconds) * time.Second):
 		}
-		result, err = r.client.GetApplication(ctx, resourceID)
-		if err != nil {
-			response.Diagnostics.AddError("Unable to read provisioning status", err.Error())
+		next, readErr := r.client.GetApplication(ctx, resourceID)
+		if readErr != nil {
+			response.Diagnostics.AddError("Unable to read provisioning status", readErr.Error())
 			return
 		}
+		if err := validateApplicationResponseIdentity(result, next); err != nil {
+			response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+			return
+		}
+		result = next
 	}
 
 	postCreatePlan := desired
@@ -317,9 +322,14 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 			response.Diagnostics.AddError("Invalid application settings", updateErr.Error())
 			return
 		}
+		previous := result
 		result, err = r.client.UpdateApplication(ctx, resourceID, update)
 		if err != nil {
 			response.Diagnostics.AddError("Unable to reconcile application settings", err.Error())
+			return
+		}
+		if err := validateApplicationResponseIdentity(previous, result); err != nil {
+			response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
 			return
 		}
 		result, err = waitForManagedRegistration(ctx, r.client, resourceID, desired, result)
@@ -329,6 +339,10 @@ func (r *applicationResource) Create(ctx context.Context, request resource.Creat
 		}
 	}
 
+	if err := validateApplicationIdentity(plan, result); err != nil {
+		response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+		return
+	}
 	expectedMetadata := desired
 	mapApplicationToModel(ctx, result, &desired, &response.Diagnostics)
 	if response.Diagnostics.HasError() {
@@ -378,10 +392,18 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 		response.Diagnostics.AddError("Unable to read AZExecute application before update", err.Error())
 		return
 	}
+	if err := validateApplicationIdentity(state, current); err != nil {
+		response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+		return
+	}
 	if current.Status != "Ready" {
 		response.Diagnostics.AddError(
 			"Application is not ready for updates",
 			applicationNotReadyMessage(current))
+		return
+	}
+	if err := validatePermissionSnapshot(ctx, plan.APIPermissionRequests, state.APIPermissionRequests, current); err != nil {
+		response.Diagnostics.AddError("Permission requests changed concurrently", err.Error())
 		return
 	}
 	update, err := updateRequestFromModel(ctx, plan, current)
@@ -392,6 +414,15 @@ func (r *applicationResource) Update(ctx context.Context, request resource.Updat
 	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update AZExecute application", err.Error())
+		return
+	}
+	warnPermissionRemoval(update, &response.Diagnostics)
+	if result.PermissionRequestsPending {
+		response.Diagnostics.AddError("Permission update did not complete", "AZExecute still reports unfinished permission reconciliation. Retry apply; the existing application is retained.")
+		return
+	}
+	if err := validateApplicationIdentity(state, result); err != nil {
+		response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
 		return
 	}
 	result, err = waitForManagedRegistration(ctx, r.client, resourceID, plan, result)
@@ -428,28 +459,9 @@ func createRequestFromModel(ctx context.Context, model applicationResourceModel,
 	if err != nil {
 		return azclient.ApplicationCreate{}, err
 	}
-	permissions := make([]azclient.APIPermissionRequest, 0)
-	if !model.APIPermissionRequests.IsNull() && !model.APIPermissionRequests.IsUnknown() {
-		var blocks []permissionRequestModel
-		diagnostics := model.APIPermissionRequests.ElementsAs(ctx, &blocks, false)
-		if diagnostics.HasError() {
-			return azclient.ApplicationCreate{}, fmt.Errorf("api_permission_request blocks could not be read: %s", diagnostics.Errors()[0].Summary())
-		}
-		for _, block := range blocks {
-			item := azclient.APIPermissionRequest{TargetType: block.TargetType.ValueString(), GrantType: block.GrantType.ValueString(), TargetApplicationEntityID: stringPointer(block.TargetApplicationEntityID), TargetExternalAPIAppID: stringPointer(block.TargetExternalAPIAppID), TargetExternalAPIDisplayName: stringPointer(block.TargetExternalAPIDisplayName), Justification: stringPointer(block.Justification)}
-			var permissionBlocks []permissionModel
-			permissionDiagnostics := block.Permissions.ElementsAs(ctx, &permissionBlocks, false)
-			if permissionDiagnostics.HasError() || len(permissionBlocks) == 0 {
-				return azclient.ApplicationCreate{}, fmt.Errorf("each api_permission_request needs at least one permission block")
-			}
-			for _, permission := range permissionBlocks {
-				if permission.ID.ValueString() == "" {
-					return azclient.ApplicationCreate{}, fmt.Errorf("permission id cannot be empty")
-				}
-				item.Permissions = append(item.Permissions, azclient.APIPermission{ID: permission.ID.ValueString(), DisplayName: stringPointer(permission.DisplayName), Value: stringPointer(permission.Value), RequiresAdminConsent: boolValue(permission.RequiresAdminConsent, false)})
-			}
-			permissions = append(permissions, item)
-		}
+	permissions, err := permissionRequestsFromModel(ctx, model.APIPermissionRequests)
+	if err != nil {
+		return azclient.ApplicationCreate{}, err
 	}
 	owners, err := stringSetPointer(model.OwnerObjectIDs)
 	if err != nil {
@@ -497,6 +509,9 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 		return azclient.ApplicationUpdate{}, err
 	}
 	update := azclient.ApplicationUpdate{Metadata: metadata, OwnerObjectIDs: owners}
+	if err := permissionUpdateFromModel(ctx, model.APIPermissionRequests, current, &update); err != nil {
+		return update, err
+	}
 	details := &azclient.ApplicationDetailsUpdate{}
 	if !model.DisplayName.IsNull() && !model.DisplayName.IsUnknown() && model.DisplayName.ValueString() != current.DisplayName {
 		details.DisplayName = stringPointer(model.DisplayName)
@@ -554,7 +569,13 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 }
 
 func mapApplicationToModel(ctx context.Context, source *azclient.Application, target *applicationResourceModel, diagnostics *diag.Diagnostics) {
-	target.ID = types.StringValue(source.ResourceID)
+	if err := validateApplicationIdentity(*target, source); err != nil {
+		diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+		return
+	}
+	target.PermissionRequestsPending = types.BoolValue(source.PermissionRequestsPending)
+	mapPermissionRequests(ctx, source.RequestedAPIPermissions, &target.APIPermissionRequests, diagnostics)
+	target.ID = identityValue(target.ID, &source.ResourceID)
 	target.DisplayName = normalizedTextValue(target.DisplayName, source.DisplayName)
 	// Entra can normalize an explicitly empty description to null. Preserve a
 	// configured empty string while still reflecting an actual removal as null.
@@ -568,9 +589,9 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 	target.Status = types.StringValue(source.Status)
 	target.StatusReason = stringTypeFromPointer(source.StatusReason)
 	target.RequestID = types.Int64Value(source.RequestID)
-	target.ApplicationEntityID = stringTypeFromPointer(source.ApplicationEntityID)
-	target.ApplicationID = stringTypeFromPointer(source.ApplicationID)
-	target.ApplicationObjectID = stringTypeFromPointer(source.ApplicationObjectID)
+	target.ApplicationEntityID = identityValue(target.ApplicationEntityID, source.ApplicationEntityID)
+	target.ApplicationID = identityValue(target.ApplicationID, source.ApplicationID)
+	target.ApplicationObjectID = identityValue(target.ApplicationObjectID, source.ApplicationObjectID)
 
 	registration := source.Registration
 	if source.Status != "Ready" && source.RequestedRegistration != nil {
@@ -657,11 +678,14 @@ func waitForManagedRegistration(
 		case <-time.After(time.Second):
 		}
 
-		var err error
-		observed, err = api.GetApplication(ctx, resourceID)
+		next, err := api.GetApplication(ctx, resourceID)
 		if err != nil {
 			return nil, fmt.Errorf("reload AZExecute application after registration update: %w", err)
 		}
+		if err := validateApplicationResponseIdentity(observed, next); err != nil {
+			return observed, err
+		}
+		observed = next
 	}
 }
 
@@ -1111,4 +1135,34 @@ func uuidValue(previous types.String, actual string) types.String {
 		return previous
 	}
 	return types.StringValue(strings.ToLower(actual))
+}
+
+func permissionRequestsFromModel(ctx context.Context, value types.Set) ([]azclient.APIPermissionRequest, error) {
+	if !value.IsNull() && !fullyKnownSet(value) {
+		return nil, fmt.Errorf("api_permission_request must be fully known before submission")
+	}
+	permissions := make([]azclient.APIPermissionRequest, 0)
+	if !value.IsNull() && !value.IsUnknown() {
+		var blocks []permissionRequestModel
+		diagnostics := value.ElementsAs(ctx, &blocks, false)
+		if diagnostics.HasError() {
+			return nil, fmt.Errorf("api_permission_request blocks could not be read: %s", diagnostics.Errors()[0].Summary())
+		}
+		for _, block := range blocks {
+			item := azclient.APIPermissionRequest{TargetType: block.TargetType.ValueString(), GrantType: block.GrantType.ValueString(), TargetApplicationEntityID: stringPointer(block.TargetApplicationEntityID), TargetExternalAPIAppID: stringPointer(block.TargetExternalAPIAppID), TargetExternalAPIDisplayName: stringPointer(block.TargetExternalAPIDisplayName), Justification: stringPointer(block.Justification)}
+			var permissionBlocks []permissionModel
+			permissionDiagnostics := block.Permissions.ElementsAs(ctx, &permissionBlocks, false)
+			if permissionDiagnostics.HasError() || len(permissionBlocks) == 0 {
+				return nil, fmt.Errorf("each api_permission_request needs at least one permission block")
+			}
+			for _, permission := range permissionBlocks {
+				if permission.ID.ValueString() == "" {
+					return nil, fmt.Errorf("permission id cannot be empty")
+				}
+				item.Permissions = append(item.Permissions, azclient.APIPermission{ID: permission.ID.ValueString(), DisplayName: stringPointer(permission.DisplayName), Value: stringPointer(permission.Value), RequiresAdminConsent: boolValue(permission.RequiresAdminConsent, false)})
+			}
+			permissions = append(permissions, item)
+		}
+	}
+	return permissions, nil
 }

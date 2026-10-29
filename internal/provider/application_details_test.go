@@ -116,13 +116,15 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 			supportsUpdates := true
 			preservesMetadata := true
 			discardMetadata := false
+			failPermissionUpdate := false
+			corruptIdentity := false
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				defer mu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/api/terraform/v1/capabilities" {
 					_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, AllowApplicationDeletion: true,
-						SupportsRegistrationRequests: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
+						SupportsRegistrationRequests: true, SupportsPermissionRequestUpdates: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
 						RequiredMetadataFields: []string{"business_justification"}, SupportsApplicationDetailsUpdates: supportsUpdates, PreservesHiddenMetadata: preservesMetadata, IncludedMetadataFields: []string{}})
 					return
 				}
@@ -151,6 +153,16 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 						t.Error(err)
 					}
 					app.Metadata = update.Metadata
+					if update.APIPermissionRequests != nil {
+						if failPermissionUpdate {
+							app.PermissionRequestsPending = true
+							w.WriteHeader(http.StatusServiceUnavailable)
+							fmt.Fprint(w, `{"code":"permission_update_failed","detail":"Response lost after partial submission."}`)
+							return
+						}
+						app.RequestedAPIPermissions = *update.APIPermissionRequests
+						app.PermissionRequestsPending = false
+					}
 					if update.OwnerObjectIDs != nil {
 						app.OwnerObjectIDs = *update.OwnerObjectIDs
 					}
@@ -213,7 +225,12 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				if app.Registration != nil {
 					app.Registration.Web.HomePageURL, app.Registration.Web.LogoutURL = nil, nil
 				}
-				_ = json.NewEncoder(w).Encode(app)
+				result := app
+				if corruptIdentity && r.Method == "GET" {
+					changedID := "99999999-2222-4333-8444-555555555555"
+					result.ApplicationID = &changedID
+				}
+				_ = json.NewEncoder(w).Encode(result)
 			}))
 			defer server.Close()
 			dir := t.TempDir()
@@ -237,6 +254,17 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				}
 				return output
 			}
+			originalPermissionBlocks := `  api_permission_request {
+    target_type = "ExternalApi"
+    target_external_api_app_id = "00000003-0000-0000-c000-000000000000"
+    grant_type = "AppRole"
+    permission {
+      id = "df021288-bdef-4463-88db-98f22de89214"
+      requires_admin_consent = true
+    }
+  }
+`
+			permissionBlocks := originalPermissionBlocks
 			config := func(name, metadata string) {
 				wait := ""
 				if resourceType == "azexecute_application_request" {
@@ -287,20 +315,12 @@ resource %q "test" {
     application_id = "AAAAAAAA-3333-4444-8555-EEEEEEEEEEEE"
     delegated_permission_ids = ["AAAAAAAA-2222-4333-8444-EEEEEEEEEEEE"]
   }]
-  api_permission_request {
-    target_type = "ExternalApi"
-    target_external_api_app_id = "00000003-0000-0000-c000-000000000000"
-    grant_type = "AppRole"
-    permission {
-      id = "df021288-bdef-4463-88db-98f22de89214"
-      requires_admin_consent = true
-    }
-  }
+  %s
   requires_elevated_permissions = true
   elevated_permissions_justification = "Read employee profiles for roster eligibility."
   %s
 }
-`, server.URL, resourceType, name, wait, metadata))
+`, server.URL, resourceType, name, wait, permissionBlocks, metadata))
 			}
 			config(" Original ", `description = "Original description"`)
 			run("apply", "-auto-approve", "-input=false", "-no-color")
@@ -322,6 +342,26 @@ resource %q "test" {
 				t.Error("waiting erased the API-generated identifier URI")
 			}
 			mu.Unlock()
+			// Existing schema-v3 state predates the additive reconciliation marker.
+			stateBytes, stateErr := os.ReadFile(filepath.Join(dir, "terraform.tfstate"))
+			if stateErr != nil {
+				t.Fatal(stateErr)
+			}
+			var legacyState map[string]any
+			if err := json.Unmarshal(stateBytes, &legacyState); err != nil {
+				t.Fatal(err)
+			}
+			for _, rawResource := range legacyState["resources"].([]any) {
+				for _, rawInstance := range rawResource.(map[string]any)["instances"].([]any) {
+					delete(rawInstance.(map[string]any)["attributes"].(map[string]any), "permission_requests_pending")
+				}
+			}
+			stateBytes, stateErr = json.Marshal(legacyState)
+			if stateErr != nil {
+				t.Fatal(stateErr)
+			}
+			write("terraform.tfstate", string(stateBytes))
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
 			for _, edit := range []struct{ name, metadata string }{
 				{"Original", `description = "New description"`},
 				{"Original", ""},                 // removal must explicitly clear description
@@ -355,6 +395,95 @@ resource %q "test" {
 				}
 				mu.Unlock()
 			}
+			// Exercise permission edits through the real Terraform planner and provider protocol.
+			for _, blocks := range []string{
+				strings.Replace(originalPermissionBlocks, "    permission {", "    permission {\n      id = \"aaaaaaaa-4444-4555-8666-eeeeeeeeeeee\"\n    }\n    permission {", 1),
+				strings.ReplaceAll(originalPermissionBlocks, "df021288-bdef-4463-88db-98f22de89214", "aaaaaaaa-4444-4555-8666-eeeeeeeeeeee"),
+				"",
+				strings.ReplaceAll(originalPermissionBlocks, "AppRole", "DelegatedScope"),
+				originalPermissionBlocks,
+			} {
+				permissionBlocks = blocks
+				config("Renamed", `project_name = "Project"`)
+				run("plan", "-out=permission.tfplan", "-input=false", "-no-color")
+				output := run("show", "-json", "permission.tfplan")
+				var plan struct {
+					ResourceChanges []struct {
+						Address string
+						Change  struct{ Actions []string }
+					} `json:"resource_changes"`
+				}
+				if err := json.Unmarshal(output, &plan); err != nil {
+					t.Fatal(err)
+				}
+				for _, change := range plan.ResourceChanges {
+					if change.Address == resourceType+".test" && !reflect.DeepEqual(change.Change.Actions, []string{"update"}) {
+						t.Fatalf("permission edit must update in place: %s", output)
+					}
+				}
+				run("apply", "-auto-approve", "-input=false", "-no-color", "permission.tfplan")
+				run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+				mu.Lock()
+				if app.ResourceID != originalID || *app.ApplicationID != clientID || *app.ApplicationObjectID != objectID || creates != 1 || deletes != 0 {
+					t.Error("permission update churned application identity")
+				}
+				mu.Unlock()
+			}
+			// A failed Update must never taint an existing app. Reverting config
+			// still needs an Update to reconcile the durable unfinished operation.
+			mu.Lock()
+			failPermissionUpdate = true
+			beforeFailure := updates
+			mu.Unlock()
+			permissionBlocks = ""
+			config("Renamed", `project_name = "Project"`)
+			failure, failureErr := command("apply", "-auto-approve", "-input=false", "-no-color")
+			if failureErr == nil || !strings.Contains(string(failure), "partial submission") {
+				t.Fatalf("expected permission failure: %v\n%s", failureErr, failure)
+			}
+			mu.Lock()
+			failPermissionUpdate = false
+			beforeRecovery := updates
+			failedPermissionAttempts := beforeRecovery - beforeFailure
+			mu.Unlock()
+			permissionBlocks = originalPermissionBlocks
+			config("Renamed", `project_name = "Project"`)
+			run("plan", "-out=recover.tfplan", "-input=false", "-no-color")
+			recoveryOutput := run("show", "-json", "recover.tfplan")
+			var recovery struct {
+				ResourceChanges []struct {
+					Address string
+					Change  struct{ Actions []string }
+				} `json:"resource_changes"`
+			}
+			if err := json.Unmarshal(recoveryOutput, &recovery); err != nil {
+				t.Fatal(err)
+			}
+			foundRecovery := false
+			for _, change := range recovery.ResourceChanges {
+				if change.Address == resourceType+".test" {
+					foundRecovery = reflect.DeepEqual(change.Change.Actions, []string{"update"})
+				}
+			}
+			if !foundRecovery {
+				t.Fatalf("unfinished operation must plan in-place update after revert: %s", recoveryOutput)
+			}
+			run("apply", "-auto-approve", "-input=false", "-no-color", "recover.tfplan")
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
+			mu.Lock()
+			if updates != beforeRecovery+1 || app.PermissionRequestsPending || creates != 1 || deletes != 0 || app.ResourceID != originalID || *app.ApplicationID != clientID {
+				t.Error("failed-update recovery did not retain and reconcile the existing application")
+			}
+			corruptIdentity = true
+			mu.Unlock()
+			badRead, badReadErr := command("plan", "-input=false", "-no-color")
+			if badReadErr == nil || !strings.Contains(string(badRead), "missing or changed client ID") {
+				t.Fatalf("identity mismatch must fail refresh: %v\n%s", badReadErr, badRead)
+			}
+			mu.Lock()
+			corruptIdentity = false
+			mu.Unlock()
+			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
 			// Reproduce the old API's erased metadata, then repair the same application.
 			mu.Lock()
 			app.Registration.AppRoles[0].Value = "Unexpected.Role"
@@ -401,7 +530,7 @@ resource %q "test" {
 			mu.Lock()
 			totalUpdates := updates
 			mu.Unlock()
-			if totalUpdates != 10 { // initial reconciliation, edits, ownership/role drift, metadata recovery
+			if totalUpdates != 16+failedPermissionAttempts { // includes HTTP retries and recovery after reverting config
 				t.Fatalf("unexpected update count: %d", totalUpdates)
 			}
 			mu.Lock()

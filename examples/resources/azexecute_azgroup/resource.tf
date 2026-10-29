@@ -4,7 +4,7 @@ resource "azexecute_azgroup" "team" {
   name                    = "Platform"
   description             = "Platform team resources"
   source                  = "auto"
-  delete_entra_on_destroy  = false
+  delete_entra_on_destroy = false
 }
 
 output "group_id" {

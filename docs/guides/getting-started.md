@@ -115,3 +115,7 @@ request is accepted by AZExecute.
   `azexecute_application_request` resource reference.
 - Add external or internal API-permission requests.
 - Use the [Azure DevOps guide](azure-devops.md) for secretless automation.
+
+## Add integrations
+
+See the [integration setup guide](integrations.md) for provider 0.13.5 AWS, Vercel, and GitHub resources, existing-connection data sources, AWS IAM federation, and a complete application-request/group/integration example.

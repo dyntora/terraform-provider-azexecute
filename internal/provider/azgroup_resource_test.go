@@ -96,6 +96,13 @@ func TestAZGroupLifecycleImportAndAccessLoss(t *testing.T) {
 		}
 		if status != 200 {
 			w.WriteHeader(status)
+			if status == 404 {
+				code := "terraform_group_not_found"
+				if strings.Contains(req.URL.Path, "group-memberships") {
+					code = "terraform_group_membership_not_found"
+				}
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": code})
+			}
 			return
 		}
 		switch req.Method {
@@ -173,6 +180,7 @@ func TestAZGroupLifecycleImportAndAccessLoss(t *testing.T) {
 		func() { saved.ResourceID = "00000000-0000-0000-0000-000000000099" },
 		func() { saved.GroupID = 0 },
 		func() { saved.Configuration.Name = "" },
+		func() { saved.Configuration.Source = "" },
 	} {
 		corrupt()
 		read := resource.ReadResponse{State: imported.State}
@@ -249,6 +257,13 @@ func TestGroupMembershipAllKindsAndRoleChanges(t *testing.T) {
 				}
 				if status != 200 {
 					w.WriteHeader(status)
+					if status == 404 {
+						code := "terraform_group_not_found"
+						if strings.Contains(req.URL.Path, "group-memberships") {
+							code = "terraform_group_membership_not_found"
+						}
+						_ = json.NewEncoder(w).Encode(map[string]string{"code": code})
+					}
 					return
 				}
 				if req.Method == "DELETE" {

@@ -10,6 +10,35 @@ import (
 	"time"
 )
 
+func TestListenerResponsesRejectMissingAndChangedIdentity(t *testing.T) {
+	for _, body := range []string{`{}`, `{"id":0,"name":"Rule","eventType":"ApplicationCreated","actionType":"AutomationTask"}`, `{"id":99,"name":"Rule","eventType":"ApplicationCreated","actionType":"AutomationTask"}`} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
+		api, _ := New(server.URL, "scope", "token", nil, time.Second)
+		if _, err := api.GetEventListener(context.Background(), 7); err == nil {
+			t.Fatal("invalid read response accepted")
+		}
+		if _, err := api.UpdateEventListener(context.Background(), 7, EventListener{}); err == nil {
+			t.Fatal("invalid update response accepted")
+		}
+		server.Close()
+	}
+}
+
+func TestResourceAbsenceRequiresMatchingCodeAndNoDependencyService(t *testing.T) {
+	for code, check := range map[string]func(error) bool{
+		"terraform_group_not_found": IsGroupNotFound, "terraform_group_membership_not_found": IsGroupMembershipNotFound, "event_listener_not_found": IsEventListenerNotFound,
+	} {
+		for _, actual := range []string{code, "", "terraform_resource_not_found", "access_denied"} {
+			for _, service := range []string{"", "graph"} {
+				err := &APIError{StatusCode: 404, Code: actual, Service: service}
+				if check(err) != (actual == code && service == "") {
+					t.Fatalf("incorrect absence classification: %+v", err)
+				}
+			}
+		}
+	}
+}
+
 func TestListenerCreateDoesNotRetryAmbiguousServerFailure(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

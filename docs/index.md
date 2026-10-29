@@ -181,3 +181,12 @@ Use the `azexecute_capabilities` data source to inspect the effective policy.
 - [Approval and provisioning workflows](guides/approval-workflows.md)
 - [Upgrade and state migration](guides/migration-v0.5.md)
 - [Troubleshooting](guides/troubleshooting.md)
+
+## Integrations
+
+Provider 0.13.5 adds AWS, Vercel, and GitHub connections with import, updates, and group linkage. Start with the [integration setup guide](guides/integrations.md).
+
+- [`azexecute_aws_integration` resource](resources/aws_integration.md) and [data source](data-sources/aws_integration.md).
+- [`azexecute_vercel_integration` resource](resources/vercel_integration.md) and [data source](data-sources/vercel_integration.md).
+- [`azexecute_github_integration` resource](resources/github_integration.md) and [data source](data-sources/github_integration.md).
+- [`azexecute_aws_federation` data source](data-sources/aws_federation.md).

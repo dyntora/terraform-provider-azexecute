@@ -67,10 +67,18 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("AZExecute API returned HTTP %d: %s", e.StatusCode, message)
 }
 
-func IsNotFound(err error) bool {
+func isResourceNotFound(err error, code string) bool {
 	var apiErr *APIError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound &&
-		apiErr.Service == "" && (apiErr.Code == "" || apiErr.Code == "terraform_resource_not_found")
+		apiErr.Service == "" && apiErr.Code == code
+}
+
+func IsGroupNotFound(err error) bool { return isResourceNotFound(err, "terraform_group_not_found") }
+func IsGroupMembershipNotFound(err error) bool {
+	return isResourceNotFound(err, "terraform_group_membership_not_found")
+}
+func IsEventListenerNotFound(err error) bool {
+	return isResourceNotFound(err, "event_listener_not_found")
 }
 
 // Only an explicit Terraform API code proves absence. Bare routing/proxy 404s
@@ -132,6 +140,15 @@ func (c *Client) GetApplication(ctx context.Context, resourceID string) (*Applic
 }
 
 func (c *Client) UpdateApplication(ctx context.Context, resourceID string, request ApplicationUpdate) (*Application, error) {
+	if request.APIPermissionRequests != nil {
+		capabilities, err := c.Capabilities(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !capabilities.SupportsPermissionRequestUpdates {
+			return nil, fmt.Errorf("this API does not support in-place api_permission_request updates; upgrade AZExecute before applying this change. The application must not be replaced")
+		}
+	}
 	if err := c.validateMetadataBeforeWrite(ctx, request.Metadata); err != nil {
 		return nil, err
 	}
@@ -277,7 +294,7 @@ func (c *Client) doWithRetry(ctx context.Context, method, path string, input, ou
 			}
 			return apiErr
 		}
-		if method == http.MethodDelete && strings.HasPrefix(path, "api/terraform/v1/applications/") && response.StatusCode != http.StatusNoContent {
+		if method == http.MethodDelete && response.StatusCode != http.StatusNoContent {
 			response.Body.Close()
 			return fmt.Errorf("AZExecute did not confirm deletion (HTTP %d; expected 204). Terraform state is retained; check the API/proxy and retry after cleanup completes", response.StatusCode)
 		}

@@ -24,7 +24,7 @@ func importApplicationState(ctx context.Context, api *azclient.Client, request r
 		return
 	}
 	if app.RequestedAPIPermissions == nil {
-		response.Diagnostics.AddError("AZExecute API upgrade required for import", "This API does not return the original API-permission request configuration. Upgrade AZExecute before importing so that Terraform can recover it without planning an accidental application replacement.")
+		response.Diagnostics.AddError("AZExecute API upgrade required for import", "This API does not return the API-permission request configuration. Upgrade AZExecute before importing so that Terraform can recover the managed requests without silently dropping them.")
 		return
 	}
 	permissionType := permissionRequestObjectType().AttrTypes["permission"].(types.SetType).ElemType

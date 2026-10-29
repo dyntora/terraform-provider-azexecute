@@ -50,6 +50,11 @@ Computed fields: `id` (Terraform UUID), `group_id` (numeric AZExecute ID), `disp
 
 ## Destroy and recovery
 
+Provider 0.13.6 requires an explicit group-absence response before forgetting a
+group, and HTTP 204 before accepting deletion. Proxy 404s, changed group identities,
+and pending deletion responses retain state. Older APIs may need an upgrade to
+confirm absence; do not remove state to bypass that diagnostic.
+
 Destroying a local group removes the group and its assignments, preserving the underlying users, applications, integrations, and machines. Non-admin callers must own every linked application. Machine assignments and integrations outside the supported owner-managed providers require TenantAdmin. Inactive groups require TenantAdmin for further management.
 
 Entra groups are **retained by default**, including their AZExecute assignments. Destroy releases Terraform management and emits a warning. To delete an Entra group, set `delete_entra_on_destroy = true`, apply, then destroy using a TenantAdmin identity. Entra group management must still be enabled and the broker must permit deletion. Only groups created by this Terraform resource can be deleted; imported Entra groups are protected. Deletion can revoke access outside AZExecute too.

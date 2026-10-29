@@ -96,6 +96,11 @@ func validateGroupResponse(result *Group, resourceID string, groupID int64, look
 	if err != nil {
 		return err
 	}
+	// This value drives a replacement-only Terraform field. An omitted source
+	// must be a read error, never drift that schedules a replacement group.
+	if result.Configuration.Source != "Auto" && result.Configuration.Source != "Local" && result.Configuration.Source != "Entra" {
+		return fmt.Errorf("AZExecute returned an incomplete group source; Terraform state is retained")
+	}
 	id, parseErr := uuid.Parse(result.ResourceID)
 	if parseErr != nil || (!lookup && id == uuid.Nil) || (resourceID != "" && !strings.EqualFold(result.ResourceID, resourceID)) || result.GroupID <= 0 || (groupID > 0 && result.GroupID != groupID) || result.Configuration.Name == "" || (result.ActualSource != "Local" && result.ActualSource != "Entra") || (result.Status != "Ready" && result.Status != "Pending" && result.Status != "Deleting") {
 		return fmt.Errorf("AZExecute returned an incomplete or mismatched group response; Terraform state is retained")

@@ -118,12 +118,12 @@ func TestProblemDetailsAreReturnedAsTypedError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Content-Type", "application/problem+json")
 		response.WriteHeader(http.StatusNotFound)
-		_, _ = response.Write([]byte(`{"title":"terraform_resource_not_found","detail":"missing","traceId":"abc"}`))
+		_, _ = response.Write([]byte(`{"title":"Not found","code":"terraform_resource_not_found","detail":"missing","traceId":"abc"}`))
 	}))
 	defer server.Close()
 	api, _ := New(server.URL, "ignored", "token", nil, time.Second)
 	_, err := api.GetApplication(context.Background(), "missing")
-	if !IsNotFound(err) {
+	if !IsApplicationNotFound(err) {
 		t.Fatalf("expected typed not-found error, got %v", err)
 	}
 }

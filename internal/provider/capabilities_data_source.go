@@ -14,6 +14,7 @@ var _ datasource.DataSourceWithConfigure = &capabilitiesDataSource{}
 
 type capabilitiesDataSource struct{ client *azclient.Client }
 type capabilitiesDataSourceModel struct {
+	SupportsPermissionRequestUpdates         types.Bool   `tfsdk:"supports_permission_request_updates"`
 	AutoApproveDelegatedPermissions          types.Bool   `tfsdk:"auto_approve_delegated_permissions"`
 	GrantAdminConsentForDelegatedPermissions types.Bool   `tfsdk:"grant_admin_consent_for_delegated_permissions"`
 	PreservesHiddenMetadata                  types.Bool   `tfsdk:"preserves_hidden_metadata"`
@@ -39,6 +40,7 @@ func (d *capabilitiesDataSource) Metadata(_ context.Context, request datasource.
 }
 func (d *capabilitiesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, response *datasource.SchemaResponse) {
 	response.Schema = schema.Schema{Description: "Reads the tenant policy enforced by the AZExecute Terraform API.", Attributes: map[string]schema.Attribute{
+		"supports_permission_request_updates":           schema.BoolAttribute{Computed: true, Description: "Whether permission requests can change in place without replacing the application."},
 		"auto_approve_delegated_permissions":            schema.BoolAttribute{Computed: true, Description: "Automatically approve Terraform delegated requests only when all scopes are enabled and defined as user-consentable. Null when the server does not expose this policy."},
 		"grant_admin_consent_for_delegated_permissions": schema.BoolAttribute{Computed: true, Description: "Grant tenant-wide consent after approval of eligible Terraform delegated scopes, independently of automatic approval. Null when the server does not expose this policy."},
 		"preserves_hidden_metadata":                     schema.BoolAttribute{Computed: true, Description: "Whether hidden metadata fields retain supplied values. False or absent on older APIs requires visibility checks before writes."},
@@ -76,5 +78,6 @@ func (d *capabilitiesDataSource) Read(ctx context.Context, _ datasource.ReadRequ
 	state.AutoApproveDelegatedPermissions = types.BoolPointerValue(result.AutoApproveDelegatedPermissions)
 	state.GrantAdminConsentForDelegatedPermissions = types.BoolPointerValue(result.GrantAdminConsentForDelegatedPermissions)
 	state.PreservesHiddenMetadata = types.BoolValue(result.PreservesHiddenMetadata)
+	state.SupportsPermissionRequestUpdates = types.BoolValue(result.SupportsPermissionRequestUpdates)
 	response.Diagnostics.Append(response.State.Set(ctx, &state)...)
 }

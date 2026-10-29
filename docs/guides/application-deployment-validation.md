@@ -7,6 +7,14 @@ description: |-
 
 # Application deployment validation
 
+Provider 0.13.6 extends the local Terraform CLI coverage to groups, memberships,
+event listeners, and AWS, Vercel, and GitHub integrations. These scenarios cover
+in-place updates, import, clean subsequent plans, authorization and proxy failures,
+unexpected identities, pending deletion responses, and retrying destroy. Additional
+fault-injection tests verify that update preflight and response checks retain the
+prior identity even when computed IDs are unknown in the plan. Live external-service
+validation remains a separate release check.
+
 Version 0.12.5 adds regression coverage for independent delegated approval and
 consent capabilities, including compatibility with older servers. It retains
 the application lifecycle coverage from 0.12.4, including role and scope removal.
@@ -83,10 +91,11 @@ identity with the required AZExecute role and application access.
 - Metadata, registration settings and ownership can be corrected in place once
   the application is Ready. Pending/rejected requests cannot be freely rewritten
   across the approval boundary.
-- Changing `api_permission_request` still plans replacement. These are original
-  request blocks, not an authoritative ongoing permission-grant resource. Review
-  replacement plans; use `lifecycle { prevent_destroy = true }` where accidental
-  replacement must be blocked.
+- Changing `api_permission_request` updates the existing application in place.
+  Pending requests are reconciled; already approved access is retained and removal
+  produces a warning. Review/revoke consent separately in AZExecute. Review explicit
+  destroy/taint/replacement plans; use `lifecycle { prevent_destroy = true }` where
+  accidental destruction must be blocked.
 - `Ready` confirms application provisioning, not completion of every downstream
   permission approval or admin-consent operation.
 - Import takes an existing AZExecute Terraform resource UUID. It does not adopt

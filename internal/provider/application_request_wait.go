@@ -36,6 +36,9 @@ func waitForApplicationRequest(ctx context.Context, client *azclient.Client, cur
 		if err != nil {
 			return current, fmt.Errorf("Unable to read provisioning status for AZExecute request %d: %w", current.RequestID, err)
 		}
+		if err := validateApplicationResponseIdentity(current, next); err != nil {
+			return current, err
+		}
 		current = next
 	}
 	return current, nil

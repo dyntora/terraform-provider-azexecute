@@ -48,7 +48,7 @@ func (p *azexecuteProvider) Metadata(_ context.Context, _ provider.MetadataReque
 
 func (p *azexecuteProvider) Schema(_ context.Context, _ provider.SchemaRequest, response *provider.SchemaResponse) {
 	response.Schema = schema.Schema{
-		Description: "Manage the tenant-approved subset of AZExecute application registrations through its dedicated Terraform API.",
+		Description: "Manage tenant-approved AZExecute applications, groups, and AWS, Vercel, and GitHub integrations.",
 		Attributes: map[string]schema.Attribute{
 			"endpoint":                    schema.StringAttribute{Optional: true, Description: "AZExecute API base URL. Defaults to AZEXECUTE_ENDPOINT or https://api.azexecute.com."},
 			"tenant_id":                   schema.StringAttribute{Optional: true, Description: "Customer Microsoft Entra tenant ID. Defaults to AZEXECUTE_TENANT_ID, ARM_TENANT_ID, or AZURE_TENANT_ID."},
@@ -134,11 +134,11 @@ func envBool(names ...string) bool {
 }
 
 func (p *azexecuteProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewEventListenerResource, NewAZGroupResource, NewAZGroupMembershipResource}
+	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewEventListenerResource, NewAZGroupResource, NewAZGroupMembershipResource, NewAWSIntegrationResource, NewVercelIntegrationResource, NewGitHubIntegrationResource}
 }
 
 func (p *azexecuteProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{NewCapabilitiesDataSource, NewApplicationDataSource, NewAZGroupDataSource, NewGroupCapabilitiesDataSource}
+	return []func() datasource.DataSource{NewCapabilitiesDataSource, NewApplicationDataSource, NewAZGroupDataSource, NewGroupCapabilitiesDataSource, NewAWSIntegrationDataSource, NewVercelIntegrationDataSource, NewGitHubIntegrationDataSource, NewAWSFederationDataSource}
 }
 
 func stringValue(value types.String, environment, fallback string) string {

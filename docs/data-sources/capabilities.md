@@ -36,6 +36,8 @@ This data source has no arguments.
 
 ### Read-Only
 
+- `supports_permission_request_updates` (Boolean) — whether permission requests can change in place while preserving the application identity. False on older APIs.
+
 - `preserves_hidden_metadata` (Boolean) — whether the API preserves valid supplied
   metadata when form fields are hidden. Missing on older APIs means false; the
   provider checks field visibility before affected writes to those APIs.

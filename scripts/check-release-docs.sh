@@ -27,6 +27,14 @@ required_files=(
   docs/resources/event_listener.md
   docs/resources/azgroup.md
   docs/resources/azgroup_membership.md
+  docs/resources/aws_integration.md
+  docs/resources/vercel_integration.md
+  docs/resources/github_integration.md
+  docs/data-sources/aws_integration.md
+  docs/data-sources/vercel_integration.md
+  docs/data-sources/github_integration.md
+  docs/data-sources/aws_federation.md
+  docs/guides/integrations.md
   docs/data-sources/azgroup.md
   docs/data-sources/group_capabilities.md
   docs/data-sources/application.md
@@ -47,6 +55,10 @@ required_files=(
   examples/resources/azexecute_event_listener/resource.tf
   examples/resources/azexecute_azgroup/resource.tf
   examples/resources/azexecute_azgroup_membership/resource.tf
+  examples/resources/azexecute_aws_integration/resource.tf
+  examples/resources/azexecute_vercel_integration/resource.tf
+  examples/resources/azexecute_github_integration/resource.tf
+  examples/integrations/main.tf
 )
 
 for file in "${required_files[@]}"; do

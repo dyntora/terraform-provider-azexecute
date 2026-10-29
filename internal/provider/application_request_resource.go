@@ -22,6 +22,7 @@ var _ resource.ResourceWithUpgradeState = &applicationRequestResource{}
 type applicationRequestResource struct{ client *azclient.Client }
 
 type applicationRequestResourceModel struct {
+	PermissionRequestsPending        types.Bool   `tfsdk:"permission_requests_pending"`
 	WaitForCompletion                types.Bool   `tfsdk:"wait_for_completion"`
 	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
 	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
@@ -133,6 +134,7 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 	}
 	errors := validateApplicationPlan(validationPlan, capabilities, request.State.Raw.IsNull())
 	validateApplicationDetailsPlan(ctx, request, response, capabilities)
+	validatePermissionRequestsPlan(ctx, request, response, capabilities)
 	if len(errors) > 0 {
 		response.Diagnostics.AddError("Invalid application request configuration for this AZExecute tenant", strings.Join(errors, "\n"))
 	}
@@ -209,6 +211,10 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 			response.Diagnostics.AddError("Unable to reconcile approved application settings", err.Error())
 			return
 		}
+		if err := validateApplicationIdentity(plan.toApplicationModel(), result); err != nil {
+			response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+			return
+		}
 		result, err = waitForManagedRegistration(ctx, r.client, result.ResourceID, applicationPlan, result)
 		if err != nil {
 			response.Diagnostics.AddError("Application registration update did not converge", err.Error())
@@ -271,6 +277,10 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 		response.Diagnostics.AddError("Unable to read AZExecute application request before update", err.Error())
 		return
 	}
+	if err := validateApplicationIdentity(state.toApplicationModel(), current); err != nil {
+		response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
+		return
+	}
 	if boolValue(plan.WaitForCompletion, false) {
 		current, err = r.waitForRequest(ctx, plan, current)
 		if err != nil {
@@ -287,6 +297,10 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 		return
 	}
 
+	if err := validatePermissionSnapshot(ctx, plan.APIPermissionRequests, state.APIPermissionRequests, current); err != nil {
+		response.Diagnostics.AddError("Permission requests changed concurrently", err.Error())
+		return
+	}
 	update, err := updateRequestFromModel(ctx, plan.toApplicationModel(), current)
 	if err != nil {
 		response.Diagnostics.AddError("Invalid approved application update", err.Error())
@@ -295,6 +309,15 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	result, err := r.client.UpdateApplication(ctx, resourceID, update)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to update approved AZExecute application", err.Error())
+		return
+	}
+	warnPermissionRemoval(update, &response.Diagnostics)
+	if result.PermissionRequestsPending {
+		response.Diagnostics.AddError("Permission update did not complete", "AZExecute still reports unfinished permission reconciliation. Retry apply; the existing application is retained.")
+		return
+	}
+	if err := validateApplicationIdentity(state.toApplicationModel(), result); err != nil {
+		response.Diagnostics.AddError("Application identity changed unexpectedly", err.Error())
 		return
 	}
 	result, err = waitForManagedRegistration(ctx, r.client, resourceID, plan.toApplicationModel(), result)
@@ -423,7 +446,8 @@ func mapApplicationToRequestModel(ctx context.Context, source *azclient.Applicat
 
 func (m applicationRequestResourceModel) toApplicationModel() applicationResourceModel {
 	return applicationResourceModel{
-		PollIntervalSeconds: m.PollIntervalSeconds, CreateTimeoutMinutes: m.CreateTimeoutMinutes,
+		PermissionRequestsPending: m.PermissionRequestsPending,
+		PollIntervalSeconds:       m.PollIntervalSeconds, CreateTimeoutMinutes: m.CreateTimeoutMinutes,
 		ID: m.ID, DisplayName: m.DisplayName, Description: m.Description, BusinessJustification: m.BusinessJustification,
 		TechnicalRequirements: m.TechnicalRequirements, IntendedAudience: m.IntendedAudience, DataAccessRequirements: m.DataAccessRequirements,
 		ComplianceNotes: m.ComplianceNotes, ExpectedGoLiveDate: m.ExpectedGoLiveDate, ProjectName: m.ProjectName, DepartmentOwner: m.DepartmentOwner,
@@ -440,6 +464,7 @@ func (m applicationRequestResourceModel) toApplicationModel() applicationResourc
 }
 
 func (m *applicationRequestResourceModel) setFromApplicationModel(source applicationResourceModel) {
+	m.PermissionRequestsPending = source.PermissionRequestsPending
 	m.PollIntervalSeconds, m.CreateTimeoutMinutes = source.PollIntervalSeconds, source.CreateTimeoutMinutes
 	m.ID, m.DisplayName, m.Description, m.BusinessJustification = source.ID, source.DisplayName, source.Description, source.BusinessJustification
 	m.TechnicalRequirements, m.IntendedAudience = source.TechnicalRequirements, source.IntendedAudience

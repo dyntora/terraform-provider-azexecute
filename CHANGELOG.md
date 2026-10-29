@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.6
+
+- Update `api_permission_request` in place on both application resources, preserving resource, request, client and object IDs. Permission changes no longer replace the application.
+- Submit added permissions through tenant approval policies. Cancel affected pending requests when removing permissions; retain already approved access and report that it must be revoked separately if required.
+- Preserve creation approval history, recover current permission configuration on import and refresh, and reject unsupported edits on older APIs before writing.
+- Recover interrupted permission updates in place, including after reverting configuration. Reject unexpected identity changes during refresh or update while retaining the existing state. Normal destroy and failed-creation cleanup remain supported.
+- Retain group, membership, and event-listener state on ambiguous 404 responses or lost access. Older APIs without explicit absence responses now report an error instead of assuming deletion.
+- Require confirmed deletion before releasing state, and reject missing or changed listener, group, and integration identities during refresh or update.
+
+## 0.13.5
+
+- Add AWS, Vercel, and GitHub integration resources and data sources, with friendly names, import, updates, and credential rotation.
+- Add AWS federation settings lookup and complete setup examples linking application requests and integrations to new or existing groups.
+- Allow group owners to assign their own AWS, Vercel, and GitHub integrations.
+
 ## 0.13.0
 
 - Add `azexecute_azgroup` for local groups and Entra groups created under tenant group policy, with import, metadata updates, and drift reads.

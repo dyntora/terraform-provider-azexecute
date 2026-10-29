@@ -41,6 +41,7 @@ func TestEventListenerLifecycleAndImport(t *testing.T) {
 		}
 		if missing {
 			w.WriteHeader(404)
+			_, _ = w.Write([]byte(`{"code":"event_listener_not_found"}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

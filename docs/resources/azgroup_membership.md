@@ -7,6 +7,11 @@ description: |-
 
 # azexecute_azgroup_membership (Resource)
 
+Provider 0.13.6 retains state when absence or deletion is unconfirmed. A plain
+404 is insufficient to prove a membership is gone; deletion requires HTTP 204
+or an explicit membership-absence response. Upgrade older APIs if they cannot
+confirm absence, then retry the intended operation.
+
 Manages one assignment. Other memberships are preserved. Removing an assignment does not delete the underlying resource.
 
 ```hcl
@@ -33,7 +38,7 @@ resource "azexecute_azgroup_membership" "owner" {
 
 `id` is computed as `group_id/type/target_id`. Changing the group, type, or target replaces the assignment; user roles update in place. An existing active assignment is reconciled to the requested role, so do not declare the same assignment in multiple states.
 
-Group ownership is required. Application links additionally require application ownership. Machine and integration links require TenantAdmin. Terraform policy is checked on every call. The last active Owner cannot be removed or demoted. Entra user memberships are read-only in AZExecute and must be maintained in Entra; application, integration, and machine links still work with Entra groups.
+Group ownership is required. Application links additionally require application ownership. Machine links require TenantAdmin. AWS, Vercel, and GitHub links require the integration creator or TenantAdmin; other integration types require TenantAdmin. Terraform policy is checked on every call. The last active Owner cannot be removed or demoted. Entra user memberships are read-only in AZExecute and must be maintained in Entra; application, integration, and machine links still work with Entra groups.
 
 The creator's automatic Owner membership is not removed by other membership resources. If managing that assignment explicitly, retain another active Owner before destroying it. Access loss produces an error and retains state; it is not treated as a deleted membership.
 

@@ -32,7 +32,7 @@ func (r *azgroupMembershipResource) Metadata(_ context.Context, req resource.Met
 	resp.TypeName = req.ProviderTypeName + "_azgroup_membership"
 }
 func (r *azgroupMembershipResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{Description: "Manages one group assignment without replacing unrelated memberships. User membership in Entra groups is owned by directory sync. Application assignments require ownership of the group and application; machine and integration assignments require tenant administrator authority.", Attributes: map[string]schema.Attribute{
+	resp.Schema = schema.Schema{Description: "Manages one group assignment without replacing unrelated memberships. User membership in Entra groups is owned by directory sync. Application assignments require ownership of the group and application; machine assignments require tenant administrator authority. AWS, Vercel, and GitHub assignments require integration-creator or tenant-administrator access; other integration types require tenant-administrator access.", Attributes: map[string]schema.Attribute{
 		"id":        schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}},
 		"group_id":  schema.Int64Attribute{Required: true, PlanModifiers: []planmodifier.Int64{int64planmodifier.RequiresReplace()}},
 		"type":      schema.StringAttribute{Required: true, PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()}, Description: "user, application, integration, or machine."},
@@ -151,7 +151,7 @@ func (r *azgroupMembershipResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 	result, err := r.client.GetGroupMembership(ctx, m.GroupID.ValueInt64(), membershipKinds[m.Kind.ValueString()], m.TargetID.ValueString())
-	if azclient.IsNotFound(err) {
+	if azclient.IsGroupMembershipNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -168,7 +168,7 @@ func (r *azgroupMembershipResource) Delete(ctx context.Context, req resource.Del
 	if resp.Diagnostics.HasError() || r.client == nil {
 		return
 	}
-	if err := r.client.DeleteGroupMembership(ctx, m.GroupID.ValueInt64(), membershipKinds[m.Kind.ValueString()], m.TargetID.ValueString()); err != nil && !azclient.IsNotFound(err) {
+	if err := r.client.DeleteGroupMembership(ctx, m.GroupID.ValueInt64(), membershipKinds[m.Kind.ValueString()], m.TargetID.ValueString()); err != nil && !azclient.IsGroupMembershipNotFound(err) {
 		resp.Diagnostics.AddError("Unable to remove group membership", err.Error())
 	}
 }
