@@ -26,7 +26,7 @@ type AWSFederationSetup struct {
 
 func (c *Client) GetAWSFederationSetup(ctx context.Context) (*AWSFederationSetup, error) {
 	var result AWSFederationSetup
-	if err := c.do(ctx, http.MethodGet, "api/v1/Integrations/AWS/FederationSetup", nil, &result); err != nil {
+	if err := c.do(ctx, http.MethodGet, "api/v1/integrations/aws/federationsetup", nil, &result); err != nil {
 		return nil, err
 	}
 	u, err := url.Parse(result.ProviderURL)

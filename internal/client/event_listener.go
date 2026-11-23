@@ -40,7 +40,7 @@ func (c *Client) CreateEventListener(ctx context.Context, request EventListener)
 	request.ID = 0
 	request.AuthorizedByUserID = nil
 	var result EventListener
-	err := c.doWithRetry(ctx, http.MethodPost, "api/v1/EventListeners", request, &result, false)
+	err := c.doWithRetry(ctx, http.MethodPost, "api/v1/eventlisteners", request, &result, false)
 	return &result, validateEventListenerResponse(result, 0, err)
 }
 
@@ -73,4 +73,4 @@ func (c *Client) DeleteEventListener(ctx context.Context, id int64) error {
 	return c.do(ctx, http.MethodDelete, eventListenerPath(id), nil, nil)
 }
 
-func eventListenerPath(id int64) string { return "api/v1/EventListeners/" + strconv.FormatInt(id, 10) }
+func eventListenerPath(id int64) string { return "api/v1/eventlisteners/" + strconv.FormatInt(id, 10) }

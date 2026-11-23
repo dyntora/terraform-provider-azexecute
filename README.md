@@ -1,9 +1,7 @@
 # AZExecute Terraform Provider
 
-Provider **0.13.7** updates documentation for lifecycle behavior, recovery, and
-the complete supported resource and data-source surface. Runtime behavior is unchanged
-from 0.13.6, which preserves application identity during permission changes and
-hardens refresh, update, and deletion recovery across groups, listeners, and integrations.
+Provider **0.13.8** preserves application identity during permission changes and
+supports recovery during refresh, update, and deletion across groups, listeners, and integrations.
 Ambiguous API responses retain state and report an error instead of assuming a resource is gone.
 
 The public `dyntora/azexecute` provider creates and manages governed Microsoft

@@ -53,7 +53,7 @@ func (r *eventListenerResource) Schema(_ context.Context, _ resource.SchemaReque
 		"id":                    schema.StringAttribute{Computed: true, PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()}, Description: "Listener ID. Import using this positive integer ID."},
 		"name":                  schema.StringAttribute{Required: true},
 		"description":           schema.StringAttribute{Optional: true},
-		"event_type":            schema.StringAttribute{Required: true, Description: "Event name from GET /api/v1/EventListeners/Catalog."},
+		"event_type":            schema.StringAttribute{Required: true, Description: "Event name from GET /api/v1/eventlisteners/catalog."},
 		"action_type":           schema.StringAttribute{Computed: true, Description: "AutomationTask or TopdeskCreateIncident, inferred from action settings."},
 		"enabled":               schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true)},
 		"execution_order":       schema.Int64Attribute{Optional: true, Computed: true, Default: int64default.StaticInt64(100)},

@@ -39,7 +39,7 @@ resource "azexecute_event_listener" "deploy_secret" {
 
 `application_entity_id` is the **AZExecute application entity UUID**, not the Terraform resource `id`, Entra application/client ID, or object ID. Wait until application provisioning has completed before adding listeners; an asynchronous application's entity ID may not yet exist.
 
-Use `GET /api/v1/EventListeners/Catalog` to discover event types and variables, `GET /api/v1/EventListeners/AutomationTasks?applicationEntityId=<uuid>&search=<name>` to select an allowed task, and `GET /api/v1/automation-tasks/<id>` for its safe input contract. The task picker returns at most 50 matches; narrow the search if needed.
+Use `GET /api/v1/eventlisteners/catalog` to discover event types and variables, `GET /api/v1/eventlisteners/automationtasks?applicationEntityId=<uuid>&search=<name>` to select an allowed task, and `GET /api/v1/automation-tasks/<id>` for its safe input contract. The task picker returns at most 50 matches; narrow the search if needed.
 
 ## Credential handling
 

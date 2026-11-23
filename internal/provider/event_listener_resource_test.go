@@ -130,7 +130,7 @@ func TestEventListenerLifecycleAndImport(t *testing.T) {
 	if gone.Diagnostics.HasError() || !gone.State.Raw.IsNull() {
 		t.Fatal("404 did not remove state", gone.Diagnostics)
 	}
-	if strings.Join(calls, ",") != "POST /api/v1/EventListeners,PUT /api/v1/EventListeners/7,GET /api/v1/EventListeners/7,DELETE /api/v1/EventListeners/7,GET /api/v1/EventListeners/7" {
+	if strings.Join(calls, ",") != "POST /api/v1/eventlisteners,PUT /api/v1/eventlisteners/7,GET /api/v1/eventlisteners/7,DELETE /api/v1/eventlisteners/7,GET /api/v1/eventlisteners/7" {
 		t.Fatal(calls)
 	}
 }

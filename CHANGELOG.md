@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.8
+
+- small bug fixes
+
 ## 0.13.7
 
 - Correct documentation for in-place permission changes, confirmed deletion, and recovery after failed creation or timeouts.
