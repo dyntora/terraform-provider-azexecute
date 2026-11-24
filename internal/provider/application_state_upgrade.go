@@ -604,6 +604,8 @@ func managedApplicationSchemaV2(includeWaitSettings bool) schema.Schema {
 }
 
 func removeLegacyRequestWaitSettings(result *schema.Schema, synchronous bool) {
+	delete(result.Attributes, "group_membership_claims")
+	delete(result.Blocks, "optional_claims")
 	delete(result.Attributes, "initial_group_role_assignments")
 	delete(result.Attributes, "permission_requests_pending")
 	if !synchronous {

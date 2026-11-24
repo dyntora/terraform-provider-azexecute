@@ -260,6 +260,31 @@ error immediately. Waiting holds the Terraform state lock and never grants appro
 Terraform never approves a request. See the
 [approval workflow guide](../guides/approval-workflows.md).
 
+## Token claims
+
+For an API that authorizes by Microsoft Entra security-group object ID, add these settings to its application request:
+
+```hcl
+  configure_registration  = true
+  group_membership_claims = "SecurityGroup"
+```
+
+`group_membership_claims` accepts `None`, `SecurityGroup`, `DirectoryRole`, `ApplicationGroup`, or `All`. For the default group ID format, the group membership setting is sufficient. To customize token claims, add an `optional_claims` block, for example:
+
+```hcl
+  optional_claims {
+    access_token {
+      name                  = "groups"
+      additional_properties = ["sam_account_name"]
+    }
+    id_token {
+      name = "email"
+    }
+  }
+```
+
+The block manages the complete set of optional claims across `access_token`, `id_token`, and `saml2_token`. Each entry accepts `name`, optional `source` (`user` for directory extensions), `essential`, and `additional_properties`. Existing requests keep the same application and client ID when claims change. Omit a setting to leave it unmanaged. Set `group_membership_claims = "None"` to disable group emission or use `optional_claims {}` to clear all optional claims. The tenant must allow registration configuration and report `supports_token_claims`.
+
 ## Schema
 
 ### Optional Waiting (Provider 0.12.0+)

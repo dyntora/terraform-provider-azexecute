@@ -124,7 +124,7 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/api/terraform/v1/capabilities" {
 					_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, AllowApplicationDeletion: true,
-						SupportsRegistrationRequests: true, SupportsInitialGroupRoleAssignments: true, SupportsPermissionRequestUpdates: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
+						SupportsRegistrationRequests: true, SupportsInitialGroupRoleAssignments: true, SupportsTokenClaims: true, SupportsPermissionRequestUpdates: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
 						RequiredMetadataFields: []string{"business_justification"}, SupportsApplicationDetailsUpdates: supportsUpdates, PreservesHiddenMetadata: preservesMetadata, IncludedMetadataFields: []string{}})
 					return
 				}
@@ -137,6 +137,9 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 					}
 					app = azclient.Application{ResourceID: create.ResourceID, DisplayName: create.DisplayName, Description: create.Description,
 						Metadata: create.Metadata, Status: "Provisioning", RequestID: 42, RequestedRegistration: create.Registration}
+					if creates == 1 && (create.Registration.GroupMembershipClaims == nil || *create.Registration.GroupMembershipClaims != "SecurityGroup" || create.Registration.OptionalClaims == nil || len(create.Registration.OptionalClaims.AccessToken) != 1 || len(create.Registration.OptionalClaims.IDToken) != 1 || len(create.Registration.OptionalClaims.SAML2Token) != 1) {
+						t.Error("approval request did not contain all token claim settings")
+					}
 					if creates == 1 && resourceType == "azexecute_application_request" && (len(create.Registration.AppRoles[0].InitialAssignments) != 1 || create.Registration.AppRoles[0].InitialAssignments[0] != (azclient.InitialRolePrincipal{ID: "aaaaaaaa-cccc-4000-8000-111111111111", PrincipalType: "Group"})) {
 						t.Error("approval request did not contain the configured group and role")
 					}
@@ -295,6 +298,15 @@ resource %q "test" {
   poll_interval_seconds = 1
   configure_registration = true
   sign_in_audience = "AzureADMyOrg"
+  group_membership_claims = "SecurityGroup"
+  optional_claims {
+    access_token {
+      name = "groups"
+      additional_properties = ["sam_account_name"]
+    }
+    id_token { name = "email" }
+    saml2_token { name = "groups" }
+  }
   owner_object_ids = ["AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"]
   web_home_page_url = ""
   web_logout_url = ""
@@ -491,13 +503,15 @@ resource %q "test" {
 			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
 			// Reproduce the old API's erased metadata, then repair the same application.
 			mu.Lock()
+			app.Registration.GroupMembershipClaims = nil
+			app.Registration.OptionalClaims = nil
 			app.Registration.AppRoles[0].Value = "Unexpected.Role"
 			app.OwnerObjectIDs = []string{}
 			mu.Unlock()
 			run("apply", "-auto-approve", "-input=false", "-no-color")
 			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
 			mu.Lock()
-			if app.Registration.AppRoles[0].Value != "Read.All" || len(app.OwnerObjectIDs) != 1 {
+			if app.Registration.GroupMembershipClaims == nil || *app.Registration.GroupMembershipClaims != "SecurityGroup" || app.Registration.OptionalClaims == nil || len(app.Registration.OptionalClaims.IDToken) != 1 || app.Registration.AppRoles[0].Value != "Read.All" || len(app.OwnerObjectIDs) != 1 {
 				t.Error("owner/registration drift was not repaired")
 			}
 			app.Metadata.RequiresElevatedPermissions = false
@@ -578,12 +592,16 @@ resource %q "test" {
 				}
 				withoutDefinitions = withoutDefinitions[:start] + "  " + attribute + " = []" + withoutDefinitions[start+end+len("\n  }]"):]
 			}
+			withoutDefinitions = strings.Replace(withoutDefinitions, "group_membership_claims = \"SecurityGroup\"", "group_membership_claims = \"None\"", 1)
+			startClaims := strings.Index(withoutDefinitions, "  optional_claims {")
+			endClaims := strings.Index(withoutDefinitions[startClaims:], "\n  }\n")
+			withoutDefinitions = withoutDefinitions[:startClaims] + "  optional_claims {}" + withoutDefinitions[startClaims+endClaims+4:]
 			write("main.tf", withoutDefinitions)
 			run("apply", "-auto-approve", "-input=false", "-no-color")
 			run("plan", "-detailed-exitcode", "-input=false", "-no-color")
 			mu.Lock()
 			if creates != 1 || deletes != 0 || app.ResourceID != originalID ||
-				len(app.Registration.AppRoles) != 0 || len(app.Registration.API.Scopes) != 0 || len(app.Registration.API.PreAuthorizedApplications) != 0 {
+				app.Registration.GroupMembershipClaims == nil || *app.Registration.GroupMembershipClaims != "None" || app.Registration.OptionalClaims == nil || len(app.Registration.OptionalClaims.AccessToken) != 0 || len(app.Registration.AppRoles) != 0 || len(app.Registration.API.Scopes) != 0 || len(app.Registration.API.PreAuthorizedApplications) != 0 {
 				t.Error("clearing permission definitions must update the existing registration in place")
 			}
 			mu.Unlock()

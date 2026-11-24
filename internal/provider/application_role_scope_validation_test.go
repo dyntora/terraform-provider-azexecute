@@ -9,6 +9,26 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+func TestTokenClaimsPlanRequiresSupportingAPIAndRegistrationConfiguration(t *testing.T) {
+	model := roleScopeModel(t, "Orders.Read", "orders_access")
+	model.GroupMembershipClaims = types.StringValue("SecurityGroup")
+	capabilities := &azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, SupportsRegistrationRequests: true, AllowRegistrationConfiguration: true}
+	check := func(want string) {
+		t.Helper()
+		got := strings.Join(validateApplicationPlan(model, capabilities, true), "\n")
+		if (want == "" && got != "") || !strings.Contains(got, want) {
+			t.Fatalf("wanted %q, got %q", want, got)
+		}
+	}
+	check("upgrade AZExecute")
+	capabilities.SupportsTokenClaims = true
+	check("")
+	model.GroupMembershipClaims = types.StringValue("Bogus")
+	check("group_membership_claims must be")
+	model.ConfigureRegistration = types.BoolValue(false)
+	check("token claims require configure_registration")
+}
+
 func TestRoleScopeCollisionsAreRejectedDuringPlanAndCreate(t *testing.T) {
 	for _, test := range []struct {
 		role, scope string

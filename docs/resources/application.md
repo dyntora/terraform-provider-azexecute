@@ -122,6 +122,10 @@ Terraform state and supported registration settings are applied.
 - Metadata and supported registration fields update in place after the
   application is ready.
 
+## Token claims
+
+Set `configure_registration = true` to manage `group_membership_claims` and the `optional_claims` block. Use `access_token`, `id_token`, and `saml2_token` entries inside the block. Each entry requires a claim `name` and accepts `source`, `essential`, and `additional_properties`. Both application resources update the existing registration in place. [Token claim settings and examples](application_request.md#token-claims)
+
 ## Schema
 
 ### Required

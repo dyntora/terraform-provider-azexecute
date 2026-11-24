@@ -9,6 +9,7 @@ type Capabilities struct {
 	PreservesHiddenMetadata                  bool     `json:"preservesHiddenMetadata"`
 	SupportsApplicationDetailsUpdates        bool     `json:"supportsApplicationDetailsUpdates"`
 	MinimumAdditionalOwners                  int64    `json:"minimumAdditionalOwners"`
+	SupportsTokenClaims                      bool     `json:"supportsTokenClaims"`
 	SupportsInitialGroupRoleAssignments      bool     `json:"supportsInitialGroupRoleAssignments"`
 	SupportsRegistrationRequests             bool     `json:"supportsRegistrationRequests"`
 	APIVersion                               string   `json:"apiVersion"`
@@ -118,7 +119,22 @@ type ApplicationOwner struct {
 	OwnerObjectID string `json:"ownerObjectId"`
 }
 
+type OptionalClaim struct {
+	Name                 string   `json:"name"`
+	Source               *string  `json:"source,omitempty"`
+	Essential            bool     `json:"essential"`
+	AdditionalProperties []string `json:"additionalProperties"`
+}
+
+type OptionalClaims struct {
+	AccessToken []OptionalClaim `json:"accessToken"`
+	IDToken     []OptionalClaim `json:"idToken"`
+	SAML2Token  []OptionalClaim `json:"saml2Token"`
+}
+
 type RegistrationConfiguration struct {
+	GroupMembershipClaims  *string                `json:"groupMembershipClaims,omitempty"`
+	OptionalClaims         *OptionalClaims        `json:"optionalClaims,omitempty"`
 	ApplicationID          string                 `json:"applicationId"`
 	ApplicationObjectID    string                 `json:"applicationObjectId"`
 	DisplayName            string                 `json:"displayName"`

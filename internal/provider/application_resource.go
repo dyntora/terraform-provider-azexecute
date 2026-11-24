@@ -31,49 +31,51 @@ var _ resource.ResourceWithUpgradeState = &applicationResource{}
 type applicationResource struct{ client *azclient.Client }
 
 type applicationResourceModel struct {
-	PermissionRequestsPending        types.Bool   `tfsdk:"permission_requests_pending"`
-	ID                               types.String `tfsdk:"id"`
-	DisplayName                      types.String `tfsdk:"display_name"`
-	Description                      types.String `tfsdk:"description"`
-	BusinessJustification            types.String `tfsdk:"business_justification"`
-	TechnicalRequirements            types.String `tfsdk:"technical_requirements"`
-	IntendedAudience                 types.String `tfsdk:"intended_audience"`
-	DataAccessRequirements           types.String `tfsdk:"data_access_requirements"`
-	ComplianceNotes                  types.String `tfsdk:"compliance_notes"`
-	ExpectedGoLiveDate               types.String `tfsdk:"expected_go_live_date"`
-	ProjectName                      types.String `tfsdk:"project_name"`
-	DepartmentOwner                  types.String `tfsdk:"department_owner"`
-	BusinessCriticality              types.Int64  `tfsdk:"business_criticality"`
-	RequiresElevatedPermissions      types.Bool   `tfsdk:"requires_elevated_permissions"`
-	ElevatedPermissionsJustification types.String `tfsdk:"elevated_permissions_justification"`
-	Environment                      types.String `tfsdk:"environment"`
-	ContactEmail                     types.String `tfsdk:"contact_email"`
-	ContactPhone                     types.String `tfsdk:"contact_phone"`
-	OwnerObjectIDs                   types.Set    `tfsdk:"owner_object_ids"`
-	APIPermissionRequests            types.Set    `tfsdk:"api_permission_request"`
-	ConfigureRegistration            types.Bool   `tfsdk:"configure_registration"`
-	SignInAudience                   types.String `tfsdk:"sign_in_audience"`
-	IsFallbackPublicClient           types.Bool   `tfsdk:"is_fallback_public_client"`
-	IdentifierURIs                   types.Set    `tfsdk:"identifier_uris"`
-	WebHomePageURL                   types.String `tfsdk:"web_home_page_url"`
-	WebLogoutURL                     types.String `tfsdk:"web_logout_url"`
-	WebEnableAccessTokenIssuance     types.Bool   `tfsdk:"web_enable_access_token_issuance"`
-	WebEnableIDTokenIssuance         types.Bool   `tfsdk:"web_enable_id_token_issuance"`
-	WebRedirectURIs                  types.Set    `tfsdk:"web_redirect_uris"`
-	SpaRedirectURIs                  types.Set    `tfsdk:"spa_redirect_uris"`
-	PublicClientRedirectURIs         types.Set    `tfsdk:"public_client_redirect_uris"`
-	RequestedAccessTokenVersion      types.Int64  `tfsdk:"requested_access_token_version"`
-	AppRoles                         types.Set    `tfsdk:"app_roles"`
-	ExposedScopes                    types.Set    `tfsdk:"exposed_scopes"`
-	PreAuthorizedApplications        types.Set    `tfsdk:"pre_authorized_applications"`
-	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
-	CreateTimeoutMinutes             types.Int64  `tfsdk:"create_timeout_minutes"`
-	Status                           types.String `tfsdk:"status"`
-	StatusReason                     types.String `tfsdk:"status_reason"`
-	RequestID                        types.Int64  `tfsdk:"request_id"`
-	ApplicationEntityID              types.String `tfsdk:"application_entity_id"`
-	ApplicationID                    types.String `tfsdk:"application_id"`
-	ApplicationObjectID              types.String `tfsdk:"application_object_id"`
+	PermissionRequestsPending        types.Bool           `tfsdk:"permission_requests_pending"`
+	ID                               types.String         `tfsdk:"id"`
+	DisplayName                      types.String         `tfsdk:"display_name"`
+	Description                      types.String         `tfsdk:"description"`
+	BusinessJustification            types.String         `tfsdk:"business_justification"`
+	TechnicalRequirements            types.String         `tfsdk:"technical_requirements"`
+	IntendedAudience                 types.String         `tfsdk:"intended_audience"`
+	DataAccessRequirements           types.String         `tfsdk:"data_access_requirements"`
+	ComplianceNotes                  types.String         `tfsdk:"compliance_notes"`
+	ExpectedGoLiveDate               types.String         `tfsdk:"expected_go_live_date"`
+	ProjectName                      types.String         `tfsdk:"project_name"`
+	DepartmentOwner                  types.String         `tfsdk:"department_owner"`
+	BusinessCriticality              types.Int64          `tfsdk:"business_criticality"`
+	RequiresElevatedPermissions      types.Bool           `tfsdk:"requires_elevated_permissions"`
+	ElevatedPermissionsJustification types.String         `tfsdk:"elevated_permissions_justification"`
+	Environment                      types.String         `tfsdk:"environment"`
+	ContactEmail                     types.String         `tfsdk:"contact_email"`
+	ContactPhone                     types.String         `tfsdk:"contact_phone"`
+	OwnerObjectIDs                   types.Set            `tfsdk:"owner_object_ids"`
+	APIPermissionRequests            types.Set            `tfsdk:"api_permission_request"`
+	ConfigureRegistration            types.Bool           `tfsdk:"configure_registration"`
+	GroupMembershipClaims            types.String         `tfsdk:"group_membership_claims"`
+	OptionalClaims                   *optionalClaimsModel `tfsdk:"optional_claims"`
+	SignInAudience                   types.String         `tfsdk:"sign_in_audience"`
+	IsFallbackPublicClient           types.Bool           `tfsdk:"is_fallback_public_client"`
+	IdentifierURIs                   types.Set            `tfsdk:"identifier_uris"`
+	WebHomePageURL                   types.String         `tfsdk:"web_home_page_url"`
+	WebLogoutURL                     types.String         `tfsdk:"web_logout_url"`
+	WebEnableAccessTokenIssuance     types.Bool           `tfsdk:"web_enable_access_token_issuance"`
+	WebEnableIDTokenIssuance         types.Bool           `tfsdk:"web_enable_id_token_issuance"`
+	WebRedirectURIs                  types.Set            `tfsdk:"web_redirect_uris"`
+	SpaRedirectURIs                  types.Set            `tfsdk:"spa_redirect_uris"`
+	PublicClientRedirectURIs         types.Set            `tfsdk:"public_client_redirect_uris"`
+	RequestedAccessTokenVersion      types.Int64          `tfsdk:"requested_access_token_version"`
+	AppRoles                         types.Set            `tfsdk:"app_roles"`
+	ExposedScopes                    types.Set            `tfsdk:"exposed_scopes"`
+	PreAuthorizedApplications        types.Set            `tfsdk:"pre_authorized_applications"`
+	PollIntervalSeconds              types.Int64          `tfsdk:"poll_interval_seconds"`
+	CreateTimeoutMinutes             types.Int64          `tfsdk:"create_timeout_minutes"`
+	Status                           types.String         `tfsdk:"status"`
+	StatusReason                     types.String         `tfsdk:"status_reason"`
+	RequestID                        types.Int64          `tfsdk:"request_id"`
+	ApplicationEntityID              types.String         `tfsdk:"application_entity_id"`
+	ApplicationID                    types.String         `tfsdk:"application_id"`
+	ApplicationObjectID              types.String         `tfsdk:"application_object_id"`
 }
 
 type permissionRequestModel struct {
@@ -152,6 +154,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"web_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"spa_redirect_uris":                  schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
 			"public_client_redirect_uris":        schema.SetAttribute{Optional: true, Computed: true, ElementType: types.StringType, PlanModifiers: useSetState},
+			"group_membership_claims":            schema.StringAttribute{Optional: true, Description: "Token group membership mode: None, SecurityGroup, DirectoryRole, ApplicationGroup, or All."},
 			"requested_access_token_version":     schema.Int64Attribute{Optional: true, Computed: true, PlanModifiers: useInt64State},
 			"exposed_scopes":                     exposedScopesSchema(),
 			"pre_authorized_applications":        preAuthorizedApplicationsSchema(),
@@ -178,6 +181,7 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 			"application_object_id":  schema.StringAttribute{Computed: true, PlanModifiers: useStringState, Description: "Microsoft Entra application object ID."},
 		},
 		Blocks: map[string]schema.Block{
+			"optional_claims": optionalClaimsBlock(),
 			"api_permission_request": schema.SetNestedBlock{
 				Description: "API permission requests for this application. Changes are submitted in place and preserve the application identity; approval and consent remain subject to tenant policy.",
 				NestedObject: schema.NestedBlockObject{
@@ -535,6 +539,11 @@ func updateRequestFromModel(ctx context.Context, model applicationResourceModel,
 			return update, fmt.Errorf("the tenant API did not return registration configuration; confirm the Terraform registration policy is enabled")
 		}
 		registration := *current.Registration
+		registration.GroupMembershipClaims = stringPointer(model.GroupMembershipClaims)
+		registration.OptionalClaims, err = tokenClaimsFromModel(ctx, model.OptionalClaims)
+		if err != nil {
+			return update, err
+		}
 		registration.SignInAudience = modelStringOr(model.SignInAudience, registration.SignInAudience, "AzureADMyOrg")
 		registration.IsFallbackPublicClient = boolValue(model.IsFallbackPublicClient, registration.IsFallbackPublicClient)
 		registration.IdentifierUris = uriValues(model.IdentifierURIs, registration.IdentifierUris)
@@ -603,6 +612,12 @@ func mapApplicationToModel(ctx context.Context, source *azclient.Application, ta
 		registration = source.RequestedRegistration
 	}
 	if registration != nil {
+		if !target.GroupMembershipClaims.IsNull() {
+			target.GroupMembershipClaims = types.StringValue(stringPointerValue(registration.GroupMembershipClaims, "None"))
+		}
+		if target.OptionalClaims != nil {
+			target.OptionalClaims = tokenClaimsToModel(ctx, registration.OptionalClaims, target.OptionalClaims, diagnostics)
+		}
 		target.SignInAudience = types.StringValue(registration.SignInAudience)
 		target.IsFallbackPublicClient = types.BoolValue(registration.IsFallbackPublicClient)
 		target.WebHomePageURL = optionalTextValue(target.WebHomePageURL, registration.Web.HomePageURL)
@@ -727,6 +742,12 @@ func managedRegistrationMismatches(ctx context.Context, desired applicationResou
 
 	registration := observed.Registration
 	mismatches := make([]string, 0, 11)
+	if configuredStringDiffers(desired.GroupMembershipClaims, stringPointerValue(registration.GroupMembershipClaims, "None")) {
+		mismatches = append(mismatches, "group_membership_claims")
+	}
+	if desired.OptionalClaims != nil && !tokenClaimsMatch(ctx, desired.OptionalClaims, registration.OptionalClaims) {
+		mismatches = append(mismatches, "optional_claims")
+	}
 	if configuredStringDiffers(desired.SignInAudience, registration.SignInAudience) {
 		mismatches = append(mismatches, "sign_in_audience")
 	}

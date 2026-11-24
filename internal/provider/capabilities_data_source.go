@@ -20,6 +20,7 @@ type capabilitiesDataSourceModel struct {
 	PreservesHiddenMetadata                  types.Bool   `tfsdk:"preserves_hidden_metadata"`
 	SupportsApplicationDetailsUpdates        types.Bool   `tfsdk:"supports_application_details_updates"`
 	MinimumAdditionalOwners                  types.Int64  `tfsdk:"minimum_additional_owners"`
+	SupportsTokenClaims                      types.Bool   `tfsdk:"supports_token_claims"`
 	SupportsRegistrationRequests             types.Bool   `tfsdk:"supports_registration_requests"`
 	ID                                       types.String `tfsdk:"id"`
 	APIVersion                               types.String `tfsdk:"api_version"`
@@ -46,6 +47,7 @@ func (d *capabilitiesDataSource) Schema(_ context.Context, _ datasource.SchemaRe
 		"preserves_hidden_metadata":                     schema.BoolAttribute{Computed: true, Description: "Whether hidden metadata fields retain supplied values. False or absent on older APIs requires visibility checks before writes."},
 		"supports_application_details_updates":          schema.BoolAttribute{Computed: true},
 		"minimum_additional_owners":                     schema.Int64Attribute{Computed: true, Description: "Minimum additional Entra user owners, excluding the original requester. Service principals do not count."},
+		"supports_token_claims":                         schema.BoolAttribute{Computed: true},
 		"supports_registration_requests":                schema.BoolAttribute{Computed: true},
 		"id":                                            schema.StringAttribute{Computed: true}, "api_version": schema.StringAttribute{Computed: true}, "enabled": schema.BoolAttribute{Computed: true},
 		"allow_application_creation": schema.BoolAttribute{Computed: true}, "allow_application_deletion": schema.BoolAttribute{Computed: true},
@@ -74,7 +76,7 @@ func (d *capabilitiesDataSource) Read(ctx context.Context, _ datasource.ReadRequ
 	if response.Diagnostics.HasError() {
 		return
 	}
-	state := capabilitiesDataSourceModel{SupportsApplicationDetailsUpdates: types.BoolValue(result.SupportsApplicationDetailsUpdates), MinimumAdditionalOwners: types.Int64Value(result.MinimumAdditionalOwners), SupportsRegistrationRequests: types.BoolValue(result.SupportsRegistrationRequests), ID: types.StringValue("tenant"), APIVersion: types.StringValue(result.APIVersion), Enabled: types.BoolValue(result.Enabled), AllowApplicationCreation: types.BoolValue(result.AllowApplicationCreation), AllowApplicationDeletion: types.BoolValue(result.AllowApplicationDeletion), AllowAPIPermissionRequests: types.BoolValue(result.AllowAPIPermissionRequests), AllowRegistrationConfiguration: types.BoolValue(result.AllowRegistrationConfiguration), UseApplicationRequestFlow: types.BoolValue(result.UseApplicationRequestFlow), UseAPIPermissionRequestFlow: types.BoolValue(result.UseAPIPermissionRequestFlow), IncludedMetadataFields: included, RequiredMetadataFields: required}
+	state := capabilitiesDataSourceModel{SupportsTokenClaims: types.BoolValue(result.SupportsTokenClaims), SupportsApplicationDetailsUpdates: types.BoolValue(result.SupportsApplicationDetailsUpdates), MinimumAdditionalOwners: types.Int64Value(result.MinimumAdditionalOwners), SupportsRegistrationRequests: types.BoolValue(result.SupportsRegistrationRequests), ID: types.StringValue("tenant"), APIVersion: types.StringValue(result.APIVersion), Enabled: types.BoolValue(result.Enabled), AllowApplicationCreation: types.BoolValue(result.AllowApplicationCreation), AllowApplicationDeletion: types.BoolValue(result.AllowApplicationDeletion), AllowAPIPermissionRequests: types.BoolValue(result.AllowAPIPermissionRequests), AllowRegistrationConfiguration: types.BoolValue(result.AllowRegistrationConfiguration), UseApplicationRequestFlow: types.BoolValue(result.UseApplicationRequestFlow), UseAPIPermissionRequestFlow: types.BoolValue(result.UseAPIPermissionRequestFlow), IncludedMetadataFields: included, RequiredMetadataFields: required}
 	state.AutoApproveDelegatedPermissions = types.BoolPointerValue(result.AutoApproveDelegatedPermissions)
 	state.GrantAdminConsentForDelegatedPermissions = types.BoolPointerValue(result.GrantAdminConsentForDelegatedPermissions)
 	state.PreservesHiddenMetadata = types.BoolValue(result.PreservesHiddenMetadata)

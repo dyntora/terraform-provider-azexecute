@@ -94,6 +94,26 @@ func validateApplicationPlan(model applicationResourceModel, capabilities *azcli
 	if creating && boolValue(model.ConfigureRegistration, false) && !capabilities.SupportsRegistrationRequests {
 		errors = append(errors, "this API does not support registration configuration in requests; upgrade AZExecute before submitting configure_registration = true")
 	}
+	if !model.GroupMembershipClaims.IsNull() || model.OptionalClaims != nil {
+		if !capabilities.SupportsTokenClaims {
+			errors = append(errors, "upgrade AZExecute to configure registration token claims")
+		}
+		if !model.ConfigureRegistration.IsUnknown() && !model.ConfigureRegistration.ValueBool() {
+			errors = append(errors, "token claims require configure_registration = true")
+		}
+		if claims := model.OptionalClaims; claims != nil && fullyKnownSet(claims.AccessToken) && fullyKnownSet(claims.IDToken) && fullyKnownSet(claims.SAML2Token) {
+			if _, err := tokenClaimsFromModel(context.Background(), claims); err != nil {
+				errors = append(errors, err.Error())
+			}
+		}
+		if !model.GroupMembershipClaims.IsNull() && !model.GroupMembershipClaims.IsUnknown() {
+			switch model.GroupMembershipClaims.ValueString() {
+			case "None", "SecurityGroup", "DirectoryRole", "ApplicationGroup", "All":
+			default:
+				errors = append(errors, "group_membership_claims must be None, SecurityGroup, DirectoryRole, ApplicationGroup, or All")
+			}
+		}
+	}
 	if setIsConfigured(model.ExposedScopes) || setIsConfigured(model.PreAuthorizedApplications) {
 		if !model.ConfigureRegistration.IsUnknown() && !boolValue(model.ConfigureRegistration, false) {
 			errors = append(errors, "exposed_scopes and pre_authorized_applications require configure_registration = true")

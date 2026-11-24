@@ -74,4 +74,5 @@ The capability response is evaluated on every read. A previously generated
 plan can still be rejected by the API if a tenant administrator changes policy
 before apply; this is intentional defense in depth.
 
+- `supports_token_claims` (Boolean) indicates that the API can store, apply, and read back registration token claims.
 - `supports_registration_requests` (Boolean) — whether the deployed API can store and provision creation-time registration configuration. Missing on older APIs means false.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.1
+
+- Configure group membership claims and optional claims for access, ID, and SAML tokens on `azexecute_application_request` and `azexecute_application`. Changes apply in place.
+
 ## 0.14.0
 
 - Schedule automatic client secret rotation with `azexecute_application_secret_rotation`. Set the secret lifetime and renewal lead time. To configure rotation in the same apply as a new application request, set `wait_for_completion = true` and reference the request’s `application_entity_id`.

@@ -21,7 +21,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.14.0"
+      version = "~> 0.14.1"
     }
     aws = {
       source  = "hashicorp/aws"

@@ -1,7 +1,7 @@
 # AZExecute Terraform Provider
 
-Provider **0.14.0** adds automatic client secret rotation and Microsoft Entra group app-role assignments.
-You can schedule rotation when provisioning an application and submit its initial group assignments for approval.
+Provider **0.14.1** adds group membership claims and optional token claims to application registrations.
+You can request claims during provisioning and update them later while keeping the same client ID.
 
 The public `dyntora/azexecute` provider creates and manages governed Microsoft
 Entra application registrations, groups, and AWS, Vercel, and GitHub integrations through the dedicated AZExecute Terraform API.
