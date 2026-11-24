@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+
+- Schedule automatic client secret rotation with `azexecute_application_secret_rotation`. Set the secret lifetime and renewal lead time. To configure rotation in the same apply as a new application request, set `wait_for_completion = true` and reference the request’s `application_entity_id`.
+- Request initial Microsoft Entra group app-role assignments with `initial_group_role_assignments` on the application request. Use `azexecute_application_group_role_assignment` to manage, import, or remove an individual assignment.
+
 ## 0.13.8
 
 - small bug fixes

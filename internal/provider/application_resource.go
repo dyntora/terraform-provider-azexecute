@@ -204,6 +204,11 @@ func managedApplicationSchema(includeWaitSettings bool) schema.Schema {
 	if !includeWaitSettings {
 		result.Attributes["wait_for_completion"] = schema.BoolAttribute{Optional: true, Description: "Wait during create/update for approval and provisioning to reach Ready. Defaults to false. Does not grant approval or wait for downstream API consent."}
 	}
+	if !includeWaitSettings {
+		result.Attributes["initial_group_role_assignments"] = schema.SetNestedAttribute{Optional: true, Description: "Groups submitted for approval and assigned during creation. Manage subsequent membership with azexecute_application_group_role_assignment.", NestedObject: schema.NestedAttributeObject{Attributes: map[string]schema.Attribute{
+			"app_role_id": schema.StringAttribute{Required: true}, "group_object_id": schema.StringAttribute{Required: true},
+		}}}
+	}
 	return result
 }
 

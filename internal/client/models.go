@@ -9,6 +9,7 @@ type Capabilities struct {
 	PreservesHiddenMetadata                  bool     `json:"preservesHiddenMetadata"`
 	SupportsApplicationDetailsUpdates        bool     `json:"supportsApplicationDetailsUpdates"`
 	MinimumAdditionalOwners                  int64    `json:"minimumAdditionalOwners"`
+	SupportsInitialGroupRoleAssignments      bool     `json:"supportsInitialGroupRoleAssignments"`
 	SupportsRegistrationRequests             bool     `json:"supportsRegistrationRequests"`
 	APIVersion                               string   `json:"apiVersion"`
 	Enabled                                  bool     `json:"enabled"`
@@ -134,14 +135,20 @@ type RegistrationConfiguration struct {
 	API                    APIConfiguration       `json:"api"`
 }
 
+type InitialRolePrincipal struct {
+	ID            string `json:"id"`
+	PrincipalType string `json:"principalType"`
+}
+
 type AppRoleConfiguration struct {
-	ID                  string `json:"id"`
-	DisplayName         string `json:"displayName"`
-	Value               string `json:"value"`
-	Description         string `json:"description"`
-	IsEnabled           bool   `json:"isEnabled"`
-	AllowUsersAndGroups bool   `json:"allowUsersAndGroups"`
-	AllowApplications   bool   `json:"allowApplications"`
+	InitialAssignments  []InitialRolePrincipal `json:"initialAssignments,omitempty"`
+	ID                  string                 `json:"id"`
+	DisplayName         string                 `json:"displayName"`
+	Value               string                 `json:"value"`
+	Description         string                 `json:"description"`
+	IsEnabled           bool                   `json:"isEnabled"`
+	AllowUsersAndGroups bool                   `json:"allowUsersAndGroups"`
+	AllowApplications   bool                   `json:"allowApplications"`
 }
 
 type URIValue struct {

@@ -551,6 +551,7 @@ type applicationRequestResourceModelV2 struct {
 
 func upgradeApplicationRequestResourceModelV2(prior applicationRequestResourceModelV2) applicationRequestResourceModel {
 	return applicationRequestResourceModel{
+		InitialGroupRoleAssignments:      emptyInitialRoleGroups(),
 		ID:                               prior.ID,
 		DisplayName:                      prior.DisplayName,
 		Description:                      prior.Description,
@@ -603,6 +604,7 @@ func managedApplicationSchemaV2(includeWaitSettings bool) schema.Schema {
 }
 
 func removeLegacyRequestWaitSettings(result *schema.Schema, synchronous bool) {
+	delete(result.Attributes, "initial_group_role_assignments")
 	delete(result.Attributes, "permission_requests_pending")
 	if !synchronous {
 		delete(result.Attributes, "wait_for_completion")

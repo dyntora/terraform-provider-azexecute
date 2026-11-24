@@ -1,8 +1,7 @@
 # AZExecute Terraform Provider
 
-Provider **0.13.8** preserves application identity during permission changes and
-supports recovery during refresh, update, and deletion across groups, listeners, and integrations.
-Ambiguous API responses retain state and report an error instead of assuming a resource is gone.
+Provider **0.14.0** adds automatic client secret rotation and Microsoft Entra group app-role assignments.
+You can schedule rotation when provisioning an application and submit its initial group assignments for approval.
 
 The public `dyntora/azexecute` provider creates and manages governed Microsoft
 Entra application registrations, groups, and AWS, Vercel, and GitHub integrations through the dedicated AZExecute Terraform API.
@@ -84,7 +83,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.13"
+      version = "~> 0.14"
     }
   }
 }

@@ -15,6 +15,8 @@ This resource is intended for `for_each`, reusable ownership modules, and cases
 where different Terraform modules own different people or automation
 identities.
 
+Configured owners apply to the app registration. AZExecute provisions its management identity as the sole owner of the enterprise application (service principal).
+
 ## Example Usage
 
 ```terraform

@@ -124,7 +124,7 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/api/terraform/v1/capabilities" {
 					_ = json.NewEncoder(w).Encode(azclient.Capabilities{Enabled: true, AllowApplicationCreation: true, AllowApplicationDeletion: true,
-						SupportsRegistrationRequests: true, SupportsPermissionRequestUpdates: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
+						SupportsRegistrationRequests: true, SupportsInitialGroupRoleAssignments: true, SupportsPermissionRequestUpdates: true, AllowRegistrationConfiguration: true, AllowAPIPermissionRequests: true,
 						RequiredMetadataFields: []string{"business_justification"}, SupportsApplicationDetailsUpdates: supportsUpdates, PreservesHiddenMetadata: preservesMetadata, IncludedMetadataFields: []string{}})
 					return
 				}
@@ -137,6 +137,9 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 					}
 					app = azclient.Application{ResourceID: create.ResourceID, DisplayName: create.DisplayName, Description: create.Description,
 						Metadata: create.Metadata, Status: "Provisioning", RequestID: 42, RequestedRegistration: create.Registration}
+					if creates == 1 && resourceType == "azexecute_application_request" && (len(create.Registration.AppRoles[0].InitialAssignments) != 1 || create.Registration.AppRoles[0].InitialAssignments[0] != (azclient.InitialRolePrincipal{ID: "aaaaaaaa-cccc-4000-8000-111111111111", PrincipalType: "Group"})) {
+						t.Error("approval request did not contain the configured group and role")
+					}
 					app.OwnerObjectIDs = *create.OwnerObjectIDs
 					app.RequestedAPIPermissions = create.APIPermissionRequests
 					for i := range app.OwnerObjectIDs {
@@ -248,6 +251,7 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				return cmd.CombinedOutput()
 			}
 			run := func(args ...string) []byte {
+				t.Helper()
 				output, err := command(args...)
 				if err != nil {
 					t.Fatalf("terraform %v: %v\n%s", args, err, output)
@@ -269,6 +273,7 @@ func TestApplicationDetailsTerraformLifecycle(t *testing.T) {
 				wait := ""
 				if resourceType == "azexecute_application_request" {
 					wait = fmt.Sprintf("wait_for_completion = %t", waitEnabled)
+					wait += "\n  initial_group_role_assignments = [{app_role_id = \"AAAAAAAA-1111-4222-8333-EEEEEEEEEEEE\", group_object_id = \"aaaaaaaa-cccc-4000-8000-111111111111\"}]"
 				}
 				write("main.tf", fmt.Sprintf(`terraform {
   required_providers {
@@ -300,7 +305,7 @@ resource %q "test" {
     value = "Read.All"
     description = "Read application data"
     is_enabled = true
-    allow_users_and_groups = false
+    allow_users_and_groups = true
     allow_applications = true
   }]
   exposed_scopes = [{
@@ -553,6 +558,15 @@ resource %q "test" {
 				t.Fatal(err)
 			}
 			withoutDefinitions := string(configuration)
+			// A future creation has no role definitions. Release the initial seed before testing tainted replacement.
+			lines := strings.Split(withoutDefinitions, "\n")
+			kept := lines[:0]
+			for _, line := range lines {
+				if !strings.HasPrefix(strings.TrimSpace(line), "initial_group_role_assignments =") {
+					kept = append(kept, line)
+				}
+			}
+			withoutDefinitions = strings.Join(kept, "\n")
 			for _, attribute := range []string{"app_roles", "exposed_scopes", "pre_authorized_applications"} {
 				start := strings.Index(withoutDefinitions, "  "+attribute+" = [{")
 				if start < 0 {

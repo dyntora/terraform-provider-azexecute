@@ -24,6 +24,8 @@ checked against the current tenant settings.
 - Use [`azexecute_azgroup`](resources/azgroup.md) for local AZExecute groups or Entra groups created under the tenant's group policy. Use [`azexecute_azgroup_membership`](resources/azgroup_membership.md) for individual assignments.
 - Read [`azexecute_group_capabilities`](data-sources/group_capabilities.md) before choosing a group source, or look up an existing group with [`azexecute_azgroup`](data-sources/azgroup.md).
 - Use [`azexecute_event_listener`](resources/event_listener.md) to run an existing automation task when an application event occurs, including protected secret/certificate renewal mappings. Multiple listeners per application are supported.
+- Manage an Entra group’s app role with [`azexecute_application_group_role_assignment`](resources/application_group_role_assignment.md).
+- Use [`azexecute_application_secret_rotation`](resources/application_secret_rotation.md) to schedule client secret renewal for a managed application.
 - Use [`azexecute_application_owner`](resources/application_owner.md) for individual owners when the parent application's inline owner set is omitted.
 - Use [`azexecute_aws_integration`](resources/aws_integration.md), [`azexecute_vercel_integration`](resources/vercel_integration.md), or [`azexecute_github_integration`](resources/github_integration.md) to manage connections. The [integration guide](guides/integrations.md) explains credentials, federation, and group assignments.
 - Read existing connections with the [AWS](data-sources/aws_integration.md), [Vercel](data-sources/vercel_integration.md), and [GitHub](data-sources/github_integration.md) data sources. Read AWS trust inputs with [`azexecute_aws_federation`](data-sources/aws_federation.md).
@@ -93,7 +95,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.13"
+      version = "~> 0.14"
     }
   }
 }

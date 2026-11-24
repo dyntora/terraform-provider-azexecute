@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ var _ resource.ResourceWithUpgradeState = &applicationRequestResource{}
 type applicationRequestResource struct{ client *azclient.Client }
 
 type applicationRequestResourceModel struct {
+	InitialGroupRoleAssignments      types.Set    `tfsdk:"initial_group_role_assignments"`
 	PermissionRequestsPending        types.Bool   `tfsdk:"permission_requests_pending"`
 	WaitForCompletion                types.Bool   `tfsdk:"wait_for_completion"`
 	PollIntervalSeconds              types.Int64  `tfsdk:"poll_interval_seconds"`
@@ -127,6 +130,34 @@ func (r *applicationRequestResource) ModifyPlan(ctx context.Context, request res
 			return
 		}
 	}
+	if request.State.Raw.IsNull() && !plan.InitialGroupRoleAssignments.IsNull() &&
+		(plan.InitialGroupRoleAssignments.IsUnknown() || len(plan.InitialGroupRoleAssignments.Elements()) > 0) && !capabilities.SupportsInitialGroupRoleAssignments {
+		response.Diagnostics.AddError("API upgrade required", "Upgrade AZExecute before submitting initial group role assignments for approval.")
+		return
+	}
+	if request.State.Raw.IsNull() && fullyKnownSet(plan.InitialGroupRoleAssignments) && len(plan.InitialGroupRoleAssignments.Elements()) > 0 &&
+		!plan.ConfigureRegistration.IsUnknown() && fullyKnownSet(plan.AppRoles) {
+		var registration azclient.RegistrationConfiguration
+		var roleErr error
+		if boolValue(plan.ConfigureRegistration, false) {
+			registration.AppRoles, roleErr = appRolesFromModel(ctx, plan.AppRoles, nil)
+		}
+		if roleErr == nil {
+			roleErr = addInitialRoleGroups(ctx, plan.InitialGroupRoleAssignments, &registration)
+		}
+		if roleErr != nil {
+			response.Diagnostics.AddError("Invalid initial group role assignments", roleErr.Error())
+			return
+		}
+	}
+	if !request.State.Raw.IsNull() && !plan.InitialGroupRoleAssignments.IsNull() && fullyKnownSet(plan.InitialGroupRoleAssignments) {
+		var previous types.Set
+		response.Diagnostics.Append(request.State.GetAttribute(ctx, path.Root("initial_group_role_assignments"), &previous)...)
+		if !previous.IsNull() && !previous.Equal(plan.InitialGroupRoleAssignments) {
+			response.Diagnostics.AddError("Initial group role assignments have already been submitted", "Manage later changes with azexecute_application_group_role_assignment.")
+			return
+		}
+	}
 	validationPlan := plan.toApplicationModel()
 	resolveRequiredMetadataConfiguration(ctx, request, response, &validationPlan, capabilities)
 	if response.Diagnostics.HasError() {
@@ -163,6 +194,10 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 		return
 	}
 
+	if err := addInitialRoleGroups(ctx, plan.InitialGroupRoleAssignments, create.Registration); err != nil {
+		response.Diagnostics.AddError("Invalid initial group role assignments", err.Error())
+		return
+	}
 	result, err := r.client.CreateApplication(ctx, create)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to submit AZExecute application request", err.Error())
@@ -179,6 +214,10 @@ func (r *applicationRequestResource) Create(ctx context.Context, request resourc
 		return
 	}
 
+	if err := verifyInitialGroupRoles(ctx, plan.InitialGroupRoleAssignments, result.RequestedRegistration); err != nil {
+		response.Diagnostics.AddError("Initial group role assignments were not confirmed", err.Error())
+		return
+	}
 	if boolValue(plan.WaitForCompletion, false) {
 		result, err = r.waitForRequest(ctx, plan, result)
 		mapApplicationToRequestModel(ctx, result, &plan, &response.Diagnostics)
@@ -275,6 +314,10 @@ func (r *applicationRequestResource) Update(ctx context.Context, request resourc
 	current, err := r.client.GetApplication(ctx, resourceID)
 	if err != nil {
 		response.Diagnostics.AddError("Unable to read AZExecute application request before update", err.Error())
+		return
+	}
+	if err := verifyInitialGroupRoles(ctx, plan.InitialGroupRoleAssignments, current.RequestedRegistration); err != nil {
+		response.Diagnostics.AddError("Initial group role assignments differ from the submitted request", err.Error())
 		return
 	}
 	if err := validateApplicationIdentity(state.toApplicationModel(), current); err != nil {
@@ -438,6 +481,71 @@ func (r *applicationRequestResource) MoveState(_ context.Context) []resource.Sta
 	}}
 }
 
+type initialGroupRole struct {
+	Role  types.String `tfsdk:"app_role_id"`
+	Group types.String `tfsdk:"group_object_id"`
+}
+
+func emptyInitialRoleGroups() types.Set {
+	return types.SetNull(types.ObjectType{AttrTypes: map[string]attr.Type{"app_role_id": types.StringType, "group_object_id": types.StringType}})
+}
+
+func addInitialRoleGroups(ctx context.Context, value types.Set, registration *azclient.RegistrationConfiguration) error {
+	if value.IsNull() {
+		return nil
+	}
+	var members []initialGroupRole
+	if d := value.ElementsAs(ctx, &members, false); d.HasError() {
+		return fmt.Errorf("invalid group role assignments: %v", d.Errors())
+	}
+	for _, member := range members {
+		group := member.Group.ValueString()
+		if !validAssignmentUUID(group) || !validAssignmentUUID(member.Role.ValueString()) {
+			return fmt.Errorf("group_object_id and app_role_id must be non-empty UUIDs")
+		}
+		var role *azclient.AppRoleConfiguration
+		if registration != nil {
+			for i := range registration.AppRoles {
+				if strings.EqualFold(registration.AppRoles[i].ID, member.Role.ValueString()) {
+					role = &registration.AppRoles[i]
+					break
+				}
+			}
+		}
+		if role == nil || !role.IsEnabled || !role.AllowUsersAndGroups {
+			return fmt.Errorf("role %s must be configured, enabled and allow users and groups", member.Role.ValueString())
+		}
+		role.InitialAssignments = append(role.InitialAssignments, azclient.InitialRolePrincipal{ID: strings.ToLower(group), PrincipalType: "Group"})
+	}
+	return nil
+}
+
+func verifyInitialGroupRoles(ctx context.Context, value types.Set, snapshot *azclient.RegistrationConfiguration) error {
+	if value.IsNull() || len(value.Elements()) == 0 {
+		return nil
+	}
+	confirmed := map[string]bool{}
+	if snapshot != nil {
+		for _, role := range snapshot.AppRoles {
+			for _, principal := range role.InitialAssignments {
+				if principal.PrincipalType == "Group" {
+					confirmed[strings.ToLower(role.ID+"/"+principal.ID)] = true
+				}
+			}
+		}
+	}
+	var assignments []initialGroupRole
+	if d := value.ElementsAs(ctx, &assignments, false); d.HasError() {
+		return fmt.Errorf("invalid group role assignments: %v", d.Errors())
+	}
+	for _, assignment := range assignments {
+		if !confirmed[strings.ToLower(assignment.Role.ValueString()+"/"+assignment.Group.ValueString())] {
+			return fmt.Errorf("the submitted request has no matching group and role. Manage later changes with azexecute_application_group_role_assignment")
+		}
+	}
+	return nil
+}
+
 func mapApplicationToRequestModel(ctx context.Context, source *azclient.Application, target *applicationRequestResourceModel, diagnostics *diag.Diagnostics) {
 	applicationModel := target.toApplicationModel()
 	mapApplicationToModel(ctx, source, &applicationModel, diagnostics)
@@ -471,6 +579,9 @@ func (m *applicationRequestResourceModel) setFromApplicationModel(source applica
 	m.DataAccessRequirements, m.ComplianceNotes, m.ExpectedGoLiveDate = source.DataAccessRequirements, source.ComplianceNotes, source.ExpectedGoLiveDate
 	m.ProjectName, m.DepartmentOwner, m.BusinessCriticality = source.ProjectName, source.DepartmentOwner, source.BusinessCriticality
 	m.RequiresElevatedPermissions, m.ElevatedPermissionsJustification = source.RequiresElevatedPermissions, source.ElevatedPermissionsJustification
+	if m.InitialGroupRoleAssignments.IsNull() {
+		m.InitialGroupRoleAssignments = emptyInitialRoleGroups()
+	}
 	m.Environment, m.ContactEmail, m.ContactPhone, m.OwnerObjectIDs = source.Environment, source.ContactEmail, source.ContactPhone, source.OwnerObjectIDs
 	m.APIPermissionRequests, m.ConfigureRegistration = source.APIPermissionRequests, source.ConfigureRegistration
 	m.SignInAudience, m.IsFallbackPublicClient, m.IdentifierURIs = source.SignInAudience, source.IsFallbackPublicClient, source.IdentifierURIs

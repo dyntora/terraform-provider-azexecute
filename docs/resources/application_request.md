@@ -24,6 +24,7 @@ differs from `azexecute_application`.
 Optional request waiting requires provider 0.12.0 or later; it is not
 available in 0.11.7 or earlier. Set `wait_for_completion = true` to keep create/update running until the application
 is `Ready`. This can also wait for a human approval; it does not approve the request.
+To configure [automatic client secret rotation](application_secret_rotation.md) in the same apply, use `wait_for_completion = true` and reference this request’s `application_entity_id` in the rotation resource.
 Polling defaults to every 5 seconds with a 60-minute deadline:
 
 ```terraform
@@ -74,6 +75,8 @@ flag. The next apply reconciles the current configuration in place, even if you
 reverted the configuration after the failure. A clean plan follows successful
 reconciliation. Unexpected changes or missing established application identifiers
 stop refresh/update with a diagnostic and preserve existing state.
+
+Configured owners apply to the app registration. AZExecute provisions its management identity as the sole owner of the enterprise application (service principal).
 
 ## Example Usage
 
@@ -322,6 +325,20 @@ policy can require an enabled field during plan and apply.
 - `environment` (String) â€” environment label, up to `50` characters.
 - `contact_email` (String) â€” valid contact email, up to `200` characters.
 - `contact_phone` (String) â€” contact telephone number, up to `20` characters.
+
+### Groups assigned during approval
+
+With `configure_registration = true`, define an enabled role in `app_roles` with `allow_users_and_groups = true`. Include its UUID and the Entra group object UUID in `initial_group_role_assignments` so the reviewer can approve them together.
+
+```terraform
+  initial_group_role_assignments = [{
+    app_role_id     = var.reader_role_id
+    group_object_id = var.reader_group_object_id
+  }]
+  wait_for_completion = true
+```
+
+Each entry contains `app_role_id` and `group_object_id`. These are initial grants in the submitted request. Manage ongoing membership with [azexecute_application_group_role_assignment](application_group_role_assignment.md).
 
 ### Authoritative Owners
 

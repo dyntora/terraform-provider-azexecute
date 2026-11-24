@@ -48,6 +48,8 @@ established application identifiers stop refresh/update with a diagnostic and
 preserve existing state. Initial creation errors can still taint the resource
 for cleanup/replacement; failed updates remain retryable on the existing app.
 
+Configured owners apply to the app registration. AZExecute provisions its management identity as the sole owner of the enterprise application (service principal).
+
 ## Example Usage
 
 ```terraform

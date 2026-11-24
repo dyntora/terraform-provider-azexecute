@@ -134,7 +134,7 @@ func envBool(names ...string) bool {
 }
 
 func (p *azexecuteProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewEventListenerResource, NewAZGroupResource, NewAZGroupMembershipResource, NewAWSIntegrationResource, NewVercelIntegrationResource, NewGitHubIntegrationResource}
+	return []func() resource.Resource{NewApplicationResource, NewApplicationRequestResource, NewApplicationOwnerResource, NewApplicationSecretRotationResource, NewApplicationGroupRoleAssignmentResource, NewEventListenerResource, NewAZGroupResource, NewAZGroupMembershipResource, NewAWSIntegrationResource, NewVercelIntegrationResource, NewGitHubIntegrationResource}
 }
 
 func (p *azexecuteProvider) DataSources(_ context.Context) []func() datasource.DataSource {
