@@ -7,6 +7,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -112,6 +114,20 @@ func TestIntegrationLifecycleAndImport(t *testing.T) {
 			}
 			a := actual.Attributes()
 			a["name"] = types.StringValue("Renamed")
+			if kind == "vercel" {
+				planModel := types.ObjectValueMust(actual.AttributeTypes(ctx), a)
+				if d := state.Set(ctx, planModel); d.HasError() {
+					t.Fatal(d)
+				}
+				metadataUpdate := resource.UpdateResponse{State: read.State}
+				r.Update(ctx, resource.UpdateRequest{Plan: tfsdk.Plan{Schema: sr.Schema, Raw: state.Raw}, State: read.State}, &metadataUpdate)
+				if metadataUpdate.Diagnostics.HasError() {
+					t.Fatal(metadataUpdate.Diagnostics)
+				}
+				if _, resent := stored["accessToken"]; resent {
+					t.Fatal("metadata update resent a token that AZExecute may have rotated")
+				}
+			}
 			a[secret] = types.StringValue("rotated-secret")
 			actual = types.ObjectValueMust(actual.AttributeTypes(ctx), a)
 			if d := state.Set(ctx, actual); d.HasError() {
@@ -123,6 +139,9 @@ func TestIntegrationLifecycleAndImport(t *testing.T) {
 				t.Fatal(update.Diagnostics)
 			}
 			state = update.State
+			if kind == "vercel" && stored["accessToken"] != "rotated-secret" {
+				t.Fatal("explicit replacement token was not sent")
+			}
 			imported := resource.ImportStateResponse{State: tfsdk.State{Schema: sr.Schema, Raw: tftypes.NewValue(sr.Schema.Type().TerraformType(ctx), nil)}}
 			r.ImportState(ctx, resource.ImportStateRequest{ID: "42"}, &imported)
 			if imported.Diagnostics.HasError() {
@@ -240,5 +259,51 @@ func TestIntegrationValidationDefersUnknownsAndChecksCredentials(t *testing.T) {
 	a["role_arn"] = types.StringValue("arn:aws:iam::999999999999:role/wrong")
 	if !validateIntegration("aws", a, true).HasError() {
 		t.Fatal("mismatched account accepted")
+	}
+}
+
+func TestVercelScopeControlsTeamRequirement(t *testing.T) {
+	attributes := integrationTestObject("vercel").Attributes()
+	attributes["team_id"] = types.StringNull()
+	for _, tc := range []struct {
+		scope string
+		valid bool
+	}{
+		{"team", false}, {"full_account", true}, {"unknown", false},
+	} {
+		attributes["token_scope"] = types.StringValue(tc.scope)
+		if validateIntegration("vercel", attributes, true).HasError() == tc.valid {
+			t.Fatalf("incorrect validation for token_scope %s", tc.scope)
+		}
+	}
+}
+
+func TestVercelTeamChangeReplacesOnlyTeamToTeamConnections(t *testing.T) {
+	ctx := context.Background()
+	r := NewVercelIntegrationResource()
+	var schema resource.SchemaResponse
+	r.Schema(ctx, resource.SchemaRequest{}, &schema)
+	state := func(scope string) tfsdk.State {
+		m := integrationTestObject("vercel")
+		fields := m.Attributes()
+		fields["token_scope"] = types.StringValue(scope)
+		s := tfsdk.State{Schema: schema.Schema}
+		if d := s.Set(ctx, types.ObjectValueMust(m.AttributeTypes(ctx), fields)); d.HasError() {
+			t.Fatal(d)
+		}
+		return s
+	}
+	for _, test := range []struct {
+		previous, next string
+		replace        bool
+	}{
+		{"team", "team", true}, {"team", "full_account", false}, {"full_account", "team", false}, {"full_account", "full_account", false},
+	} {
+		old, next := state(test.previous), state(test.next)
+		var result stringplanmodifier.RequiresReplaceIfFuncResponse
+		replaceVercelTeam(ctx, planmodifier.StringRequest{State: old, Plan: tfsdk.Plan{Schema: schema.Schema, Raw: next.Raw}}, &result)
+		if result.Diagnostics.HasError() || result.RequiresReplace != test.replace {
+			t.Fatalf("%s to %s: %+v", test.previous, test.next, result)
+		}
 	}
 }

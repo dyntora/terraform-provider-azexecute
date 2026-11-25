@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.0
+
+- Set `token_scope = "full_account"` on a Vercel integration to use a Full Account token. Existing team connections keep their team scope.
+- Configure Vercel delivery for rotated application secrets with `azexecute_application_vercel_delivery`. Choose projects, custom environments and which hosted environments to rebuild.
+- Add variable updates, redeployment and access-token rotation to existing tasks with `azexecute_vercel_task_step`.
+- Editing integration metadata preserves access tokens rotated by AZExecute.
+
 ## 0.14.1
 
 - Configure group membership claims and optional claims for access, ID, and SAML tokens on `azexecute_application_request` and `azexecute_application`. Changes apply in place.

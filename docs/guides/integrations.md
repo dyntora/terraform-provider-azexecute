@@ -21,7 +21,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.14.1"
+      version = "~> 0.15.0"
     }
     aws = {
       source  = "hashicorp/aws"
@@ -170,7 +170,7 @@ resource "azexecute_azgroup_membership" "github" {
 }
 ```
 
-Vercel requires an existing team and a token with team access. GitHub requires an installed GitHub App and its private key, with repository permissions appropriate to the intended tasks. GitHub Enterprise endpoints are not supported by these resources. See the [Vercel](../resources/vercel_integration.md) and [GitHub](../resources/github_integration.md) references.
+For a team connection, supply a Vercel token and team ID. With provider 0.15.0, set `token_scope = "full_account"` to register a Full Account token and optionally select a default team. GitHub requires an installed GitHub App and its private key, with repository permissions appropriate to the intended tasks. GitHub Enterprise endpoints are not supported by these resources. See the [Vercel](../resources/vercel_integration.md) and [GitHub](../resources/github_integration.md) references.
 
 ## Reuse existing groups and connections
 
@@ -197,3 +197,5 @@ Data sources leave lifecycle ownership outside this configuration. To manage an 
 Credentials are marked sensitive but remain in state when configured. Protect state with encryption and access controls. Reads and data sources do not expose stored credentials; import can retain them without re-entering them. Supply a replacement token or key to rotate it. Out-of-band credential changes cannot be detected by refresh. Optional secret removal preserves the saved value; an explicit empty string clears an optional secret.
 
 An interrupted create reports a recovery UUID. Inspect or import that UUID before retrying so a completed server write is not duplicated. Access denial and unconfirmed responses retain state. Destroy requires all group memberships to be removed first, and Terraform orders referenced memberships correctly. Destroying an integration does not delete its external IAM role, team, App, or account.
+
+Use [Vercel delivery](../resources/application_vercel_delivery.md) for rotated application secrets and [Vercel task steps](../resources/vercel_task_step.md) for variable updates, hosted redeployments, or rotation of the integration token itself.

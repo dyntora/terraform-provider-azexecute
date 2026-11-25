@@ -8,10 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"regexp"
@@ -43,7 +45,8 @@ func integrationFields(kind string) []integrationField {
 			integrationField{"external_id", "externalId", "Optional external ID. Omit to preserve the stored value; use an empty string to clear.", false, false, true, 200})
 	case "vercel":
 		fields = append(fields,
-			integrationField{"team_id", "teamId", "Vercel team ID.", true, true, false, 100},
+			integrationField{"token_scope", "tokenScope", "Vercel token scope. Choose team or full_account.", false, false, false, 20},
+			integrationField{"team_id", "teamId", "Required for team tokens. Optional default team for full accounts.", false, false, false, 100},
 			integrationField{"team_slug", "teamSlug", "Optional Vercel team slug.", false, false, false, 100},
 			integrationField{"access_token", "accessToken", "Required on creation. Omit after import to preserve the stored token. Stored in Terraform state when configured.", false, false, true, 500})
 	case "github":
@@ -79,13 +82,28 @@ func (r *integrationResource) Schema(_ context.Context, _ resource.SchemaRequest
 	}
 	for _, f := range integrationFields(r.kind) {
 		v := schema.StringAttribute{Required: f.required, Optional: !f.required, Sensitive: f.sensitive, Description: f.description}
+		if f.name == "token_scope" {
+			v.Computed = true
+			v.Default = stringdefault.StaticString("team")
+		}
 		if f.replace {
 			v.PlanModifiers = []planmodifier.String{stringplanmodifier.RequiresReplace()}
+		}
+		if r.kind == "vercel" && f.name == "team_id" {
+			const description = "Moving a team-scoped integration to another team requires replacement."
+			v.PlanModifiers = []planmodifier.String{stringplanmodifier.RequiresReplaceIf(replaceVercelTeam, description, description)}
 		}
 		a[f.name] = v
 	}
 	resp.Schema = schema.Schema{Description: "Manage a " + r.kind + " integration. Requires the integration creator or TenantAdmin. Credentials are never returned by reads. Destroy requires group memberships to be removed first.", Attributes: a}
 }
+func replaceVercelTeam(ctx context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+	var oldScope, newScope types.String
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("token_scope"), &oldScope)...)
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("token_scope"), &newScope)...)
+	resp.RequiresReplace = !resp.Diagnostics.HasError() && oldScope.ValueString() != "full_account" && newScope.ValueString() != "full_account"
+}
+
 func integrationString(a map[string]attr.Value, name string) types.String {
 	v, ok := a[name].(types.String)
 	if !ok {
@@ -136,7 +154,12 @@ func validateIntegration(kind string, a map[string]attr.Value, create bool) diag
 	}
 	if kind == "vercel" {
 		v := integrationString(a, "team_id")
-		if !v.IsUnknown() && !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(v.ValueString()) {
+		scope := integrationString(a, "token_scope")
+		if !scope.IsUnknown() && !scope.IsNull() && scope.ValueString() != "team" && scope.ValueString() != "full_account" {
+			d.AddError("Invalid Vercel token scope", "Choose team or full_account.")
+		}
+		requiredTeam := !scope.IsUnknown() && scope.ValueString() != "full_account"
+		if !v.IsUnknown() && (requiredTeam || v.ValueString() != "") && !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(v.ValueString()) {
 			d.AddError("Invalid Vercel team", "team_id must contain letters, digits, underscores, or hyphens.")
 		}
 	}
@@ -184,6 +207,13 @@ func setIntegration(kind string, m types.Object, result *azclient.Integration) (
 				d.AddError("Invalid integration response", "Invalid "+f.name+"; Terraform state is retained.")
 				continue
 			}
+		}
+		if f.name == "token_scope" && v == nil {
+			scope := "team"
+			v = &scope
+		}
+		if f.name == "team_id" && v != nil && *v == "" {
+			v = nil
 		}
 		a[f.name] = types.StringPointerValue(v)
 	}
@@ -282,7 +312,12 @@ func (r *integrationResource) Update(ctx context.Context, req resource.UpdateReq
 		resp.Diagnostics.AddError("Unable to verify integration identity before update", err.Error())
 		return
 	}
-	result, err := r.client.UpdateIntegration(ctx, r.kind, id, integrationInput(r.kind, m.Attributes()))
+	input := integrationInput(r.kind, m.Attributes())
+	// AZExecute can rotate a Vercel token independently of Terraform state.
+	if r.kind == "vercel" && integrationString(m.Attributes(), "access_token").Equal(integrationString(previous.Attributes(), "access_token")) {
+		delete(input, "accessToken")
+	}
+	result, err := r.client.UpdateIntegration(ctx, r.kind, id, input)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to update integration", err.Error())
 		return

@@ -7,9 +7,9 @@ description: |-
 
 # azexecute_vercel_integration (Resource)
 
-Requires provider 0.13.5 or later, the enabled Terraform API, and the Integrations license feature. A registered caller can create a connection and manage connections they created. TenantAdmin can also manage existing connections; Operator alone does not grant that access. Application-owned integrations require TenantAdmin. Every operation rechecks tenant policy and access.
+Full Account scope requires provider 0.15.0 or later. Team scope requires provider 0.13.5 or later, the enabled Terraform API, and the Integrations license feature. A registered caller can create a connection and manage connections they created. TenantAdmin can also manage existing connections; Operator alone does not grant that access. Application-owned integrations require TenantAdmin. Every operation rechecks tenant policy and access.
 
-Create a Vercel access token that can access the intended team, then supply its team ID and token. AZExecute verifies team access before saving. This resource registers the connection; it does not create a Vercel account, team, project, or token. See [Vercel token management](https://vercel.com/docs/rest-api/reference/welcome#authentication).
+Supply a team token and team ID, or set `token_scope = "full_account"` and supply a Full Account token. AZExecute verifies access before saving. This resource registers the connection; it does not create a Vercel account, team, project, or token. See [Vercel token management](https://vercel.com/docs/rest-api/reference/welcome#authentication).
 
 ## Example
 
@@ -44,9 +44,10 @@ The group can be a resource or an existing `azexecute_azgroup` data source. Crea
 | `notes` | Optional notes, maximum 2000 characters. |
 | `enabled` | Optional boolean, default `true`. |
 | `global` | Optional boolean, default `false`. Controls global availability under AZExecute access rules; use group-scoped access for the linked workflow. |
-| `team_id` | Required Vercel team ID, maximum 100 characters. Immutable. |
+| `token_scope` | `team` (default) or `full_account`. |
+| `team_id` | Required for team scope. Moving a team-scoped connection to another team replaces it. Full Account connections can change their default team in place. Maximum 100 characters. |
 | `team_slug` | Optional team slug, maximum 100 characters. |
-| `access_token` | Sensitive Vercel token, maximum 500 characters. Required on creation; omit after import to retain the stored token. Supply a new value to rotate it. |
+| `access_token` | Sensitive Vercel token, maximum 500 characters. Required on creation. Omit after import to keep the stored token. Changing this value replaces the credential. Editing other settings preserves the token currently stored by AZExecute, including one rotated by an automation task. |
 
 ## Read-only attributes
 

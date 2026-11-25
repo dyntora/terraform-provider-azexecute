@@ -34,6 +34,8 @@ The reference makes Terraform wait for the request to finish before configuring 
 
 Applying the resource enables the schedule. An app without a previous renewal can rotate on the next eligible scheduler run. The secret value stays out of Terraform state. Changes apply in place. Destroying the schedule disables automatic secret renewal and preserves the app, existing credentials, and delivery configuration. Use a single Terraform resource per app.
 
+For Vercel delivery, configure [the application’s Vercel destinations](application_vercel_delivery.md) first. When creating both resources together, add `depends_on = [azexecute_application_vercel_delivery.portal]` to the schedule so the first renewal can deliver to the selected environments.
+
 Import an existing enabled schedule using the managed application UUID:
 
 ```shell

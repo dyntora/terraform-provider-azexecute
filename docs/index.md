@@ -95,7 +95,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.14"
+      version = "~> 0.15"
     }
   }
 }
@@ -231,3 +231,6 @@ Provider 0.13.5 adds AWS, Vercel, and GitHub connections with import, updates, a
 - [`azexecute_vercel_integration` resource](resources/vercel_integration.md) and [data source](data-sources/vercel_integration.md).
 - [`azexecute_github_integration` resource](resources/github_integration.md) and [data source](data-sources/github_integration.md).
 - [`azexecute_aws_federation` data source](data-sources/aws_federation.md).
+
+- [Vercel application secret delivery](resources/application_vercel_delivery.md)
+- [Vercel automation task step](resources/vercel_task_step.md)

@@ -62,7 +62,9 @@ func (c *Client) integration(ctx context.Context, method, path, kind, id string,
 	case "aws":
 		required = append(required, "accountId", "service", "roleArn")
 	case "vercel":
-		required = append(required, "teamId")
+		if string(result.Configuration["tokenScope"]) != `"full_account"` {
+			required = append(required, "teamId")
+		}
 	case "github":
 		required = append(required, "appId", "installationId")
 	}

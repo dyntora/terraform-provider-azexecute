@@ -1,7 +1,6 @@
 # AZExecute Terraform Provider
 
-Provider **0.14.1** adds group membership claims and optional token claims to application registrations.
-You can request claims during provisioning and update them later while keeping the same client ID.
+Provider **0.15.0** adds Full Account Vercel integrations, application secret delivery to custom environments, and Vercel automation task steps.
 
 The public `dyntora/azexecute` provider creates and manages governed Microsoft
 Entra application registrations, groups, and AWS, Vercel, and GitHub integrations through the dedicated AZExecute Terraform API.
@@ -83,7 +82,7 @@ terraform {
   required_providers {
     azexecute = {
       source  = "dyntora/azexecute"
-      version = "~> 0.14"
+      version = "~> 0.15"
     }
   }
 }

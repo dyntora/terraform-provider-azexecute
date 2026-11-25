@@ -7,7 +7,7 @@ description: |-
 
 # azexecute_vercel_integration (Data Source)
 
-Requires provider 0.13.5 or later. Reads the matching integration by its numeric AZExecute ID without adopting it, changing its settings, or modifying memberships. Requires the creator or TenantAdmin, the enabled Terraform API, and the Integrations license feature. Credentials are not exposed.
+Full Account scope requires provider 0.15.0 or later. Team scope requires provider 0.13.5 or later. Reads the matching integration by its numeric AZExecute ID without adopting it, changing its settings, or modifying memberships. Requires the creator or TenantAdmin, the enabled Terraform API, and the Integrations license feature. Credentials are not exposed.
 
 ```hcl
 data "azexecute_vercel_integration" "existing" {
@@ -33,6 +33,6 @@ resource "azexecute_azgroup_membership" "connection" {
 
 - `id`: Terraform UUID, or null if the connection has never been imported.
 - `name`, `description`, `notes`, `enabled`, `global`: current connection metadata.
-- `team_id`, `team_slug`: connection settings.
+- `token_scope`, `team_id`, and `team_slug` describe the connection.
 
 See the [resource reference](../resources/vercel_integration.md) for field meanings and provider-specific limitations.
